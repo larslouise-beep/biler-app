@@ -11,11 +11,12 @@
 
 const FOERSTE_ADMIN = { navn: '', pin: '' }; // udfyldes kun lokalt første gang opsaetning() køres – læg aldrig PIN i git
 const SESSION_TIMER = 6;          // så længe et login højst gælder (max 6 timer)
-const MAKS_FORKERTE_PIN = 5;      // derefter låses medarbejderen i 15 minutter
+const MAKS_FORKERTE_PIN = 5;
+const RADIUS_STD = 75;            // standard-radius (m) for en lokations GPS-område      // derefter låses medarbejderen i 15 minutter
 
 const ARK = {
   medarbejdere: ['id', 'navn', 'rolle', 'aktiv', 'pinHash', 'salt', 'oprettet'],
-  lokationer:   ['id', 'navn', 'type', 'adresse', 'oprettet'],
+  lokationer:   ['id', 'navn', 'type', 'adresse', 'oprettet', 'lat', 'lng', 'radius'],
   biler:        ['id', 'vin', 'regnr', 'maerke', 'model', 'farve', 'kategori', 'status',
                  'lokation', 'lokationNavn', 'plads', 'bilTs', 'bilAf', 'bilAfNavn',
                  'noegler', 'noeglerTekst', 'note', 'oprettet', 'opdateret', 'opdateretAf', 'opdateretAfNavn',
@@ -147,7 +148,8 @@ function me_(token) {
 
 // ---------------------------------------------------------------- data
 function data_(me) {
-  const lok = rows_('lokationer').map(function (l) { return { id: l.id, navn: String(l.navn), type: l.type || 'begge', adresse: String(l.adresse || '') }; });
+  const lok = rows_('lokationer').map(function (l) { return { id: l.id, navn: String(l.navn), type: l.type || 'begge', adresse: String(l.adresse || ''),
+    lat: num_(l.lat), lng: num_(l.lng), radius: num_(l.radius) }; });
   const biler = rows_('biler').map(function (v) {
     const o = {};
     ARK.biler.forEach(function (c) { o[c] = v[c]; });
@@ -221,7 +223,7 @@ function opretBil_(me, p) {
     bilTs: now, bilAf: me.id, bilAfNavn: me.navn, noegler: noegler, note: str_(p.note), oprettet: now };
   delete v._ny;
   const gps = saetGps_(v, me, p.gps);
-  gemBil_(v, me, 'Oprettet – ' + locName_(v.lokation) + (v.plads ? ' – ' + v.plads : '') + (gps ? ' (GPS ±' + v.gpsNoejagtighed + ' m)' : ''));
+  gemBil_(v, me, 'Oprettet – ' + locName_(v.lokation) + (v.plads ? ' – ' + v.plads : '') + (gps ? ' (GPS ±' + v.gpsNoejagtighed + ' m)' + gpsAfvigelse_(v.lokation, v) : ''));
 }
 function flyt_(me, p) {
   const v = findBil_(String(p.id));
@@ -233,7 +235,7 @@ function flyt_(me, p) {
     const flyttet = lok !== v.lokation || plads !== String(v.plads || '');
     v.lokation = lok; v.plads = plads; v.bilTs = Date.now(); v.bilAf = me.id; v.bilAfNavn = me.navn;
     tekst = (flyttet ? 'Bil flyttet til ' : 'Bil registreret på ') + locName_(lok) + (plads ? ' – ' + plads : '');
-    if (saetGps_(v, me, p.gps)) tekst += ' (GPS ±' + v.gpsNoejagtighed + ' m)';
+    if (saetGps_(v, me, p.gps)) tekst += ' (GPS ±' + v.gpsNoejagtighed + ' m)' + gpsAfvigelse_(lok, v);
   } else {
     const n = String(p.target).replace(/^n/, '');
     if (!v.noegler[n]) throw fejl_('DATA', 'Nøglen findes ikke.');
@@ -242,6 +244,20 @@ function flyt_(me, p) {
   }
   if (p.status && STATUS.indexOf(p.status) >= 0 && p.status !== v.status) { v.status = p.status; tekst += ' · status: ' + p.status; }
   gemBil_(v, me, tekst);
+}
+// Afstand i meter mellem to GPS-punkter (haversine)
+function afstand_(lat1, lng1, lat2, lng2) {
+  const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2), b = Math.sin((lng2 - lng1) * r / 2);
+  return 2 * 6371000 * Math.asin(Math.sqrt(a * a + Math.cos(lat1 * r) * Math.cos(lat2 * r) * b * b));
+}
+// Tekst til historikken, hvis bilens GPS ligger uden for den valgte lokations radius
+function gpsAfvigelse_(lokId, v) {
+  if (!lokId || SPECIAL[lokId]) return '';
+  const l = rows_('lokationer').filter(function (x) { return x.id === lokId; })[0];
+  if (!l || num_(l.lat) === null || num_(l.lng) === null) return '';
+  const d = Math.round(afstand_(num_(l.lat), num_(l.lng), v.gpsLat, v.gpsLng));
+  const radius = num_(l.radius) || RADIUS_STD;
+  return d - (Number(v.gpsNoejagtighed) || 0) > radius ? ' ⚠ GPS ' + d + ' m fra ' + String(l.navn) : '';
 }
 function saetGps_(v, me, g) {
   if (!g) return false;
@@ -289,6 +305,16 @@ function gemLokation_(p) {
   let l = p.id ? rows_('lokationer').filter(function (x) { return x.id === p.id; })[0] : null;
   if (!l) l = { id: Utilities.getUuid().slice(0, 8), oprettet: new Date() };
   l.navn = navn; l.type = type; l.adresse = str_(p.adresse);
+  if (p.rydPos) { l.lat = ''; l.lng = ''; l.radius = ''; }
+  else {
+    if (p.lat !== undefined && p.lat !== null && p.lat !== '') {
+      const lat = Number(p.lat), lng = Number(p.lng);
+      if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) throw fejl_('DATA', 'Ugyldig GPS-position.');
+      l.lat = Math.round(lat * 1e6) / 1e6; l.lng = Math.round(lng * 1e6) / 1e6;
+    }
+    if (p.radius !== undefined && p.radius !== '') l.radius = Math.max(10, Math.min(2000, Math.round(Number(p.radius) || RADIUS_STD)));
+  }
+  sikrKolonner_('lokationer');
   writeRow_('lokationer', l);
 }
 function gyldigPin_(pin) {
@@ -347,3 +373,12 @@ function sletRow_(k, id) {
 }
 function parseJson_(s) { try { const o = JSON.parse(s || '{}'); return o && typeof o === 'object' ? o : {}; } catch (e) { return {}; } }
 function str_(s) { return String(s == null ? '' : s).trim(); }
+function num_(x) { if (x === '' || x === null || x === undefined) return null; const n = Number(x); return isFinite(n) ? n : null; }
+// Tilføjer manglende kolonner bagerst i arket (så opsaetning() ikke skal køres igen efter en opdatering)
+function sikrKolonner_(k) {
+  const sh = sheet_(k);
+  const har = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  ARK[k].filter(function (c) { return har.indexOf(c) < 0; }).forEach(function (c) {
+    sh.getRange(1, sh.getLastColumn() + 1).setValue(c).setFontWeight('bold').setBackground('#282830').setFontColor('#ffffff');
+  });
+}

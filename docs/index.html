@@ -363,6 +363,55 @@ function whoWhen(af, afNavn, ts){ return ts ? `${esc(empName(af, afNavn))} · ${
 
 // ---------- GPS ----------
 const GPS = {pos:null, err:null, busy:false, watch:null};
+const RADIUS_STD = 75; // m – skal matche RADIUS_STD i Code.gs
+function hasPos(l){ return !!l && l.lat!=null && l.lng!=null && l.lat!=="" && l.lng!==""; }
+function distM(a,b,c,d){ const r=Math.PI/180, x=Math.sin((c-a)*r/2), y=Math.sin((d-b)*r/2); return 2*6371000*Math.asin(Math.sqrt(x*x+Math.cos(a*r)*Math.cos(c*r)*y*y)); }
+function locDist(l,pos){ return hasPos(l)&&pos ? distM(+l.lat,+l.lng,pos.lat,pos.lng) : null; }
+// Nærmeste bil-lokation, som GPS-positionen ligger inden for (radius + usikkerhed)
+function gpsLoc(pos){
+  if(!pos) return null; let best=null;
+  carLocs().forEach(l=>{ const d=locDist(l,pos); if(d===null) return; const r=+l.radius||RADIUS_STD;
+    if(d-pos.acc<=r && (!best || d/r < best.d/best.r)) best={l,d,r}; });
+  return best;
+}
+function curPick(){ const st=S.moveState && S.moveState.target==="bil" ? S.moveState : S.createState; return st||null; }
+function selectLoc(id){
+  document.querySelectorAll("#locgrid .locbtn").forEach(b=>b.classList.toggle("on", b.dataset.loc===id));
+  if(S.moveState && $("#savemove")){ S.moveState.loc=id; $("#savemove").disabled=false; }
+  if(S.createState && $("#savecreate")){ S.createState.loc=id; $("#savecreate").disabled=false; }
+}
+function gpsHook(){
+  if(S.locEdit && S.locEdit.want && GPS.pos){
+    S.locEdit.pos=GPS.pos; const i=$("#locposinfo");
+    if(i) i.textContent = `Ny position klar (±${GPS.pos.acc} m) – gemmes når du trykker Gem.`;
+  }
+  const st=curPick(); if(!st) return;
+  const m=gpsLoc(GPS.pos);
+  if(m && !st.manual && st.loc!==m.l.id){ selectLoc(m.l.id); st.auto=m.l.id; st.warnAck=false; }
+  locCheck();
+}
+// Sammenlign valgt lokation med GPS og vis info/advarsel under lokationsknapperne
+function locCheck(){
+  const st=curPick(), el=$("#locwarn"); if(!st||!el) return;
+  st.mismatch=false; let html="";
+  const l = st.loc && !SPECIAL[st.loc] ? S.locations.find(x=>x.id===st.loc) : null;
+  const d = l ? locDist(l,GPS.pos) : null;
+  if(d!==null){
+    const r=+l.radius||RADIUS_STD;
+    if(d-GPS.pos.acc > r){
+      st.mismatch=true; const m=gpsLoc(GPS.pos);
+      html=`<div class="banner warn" style="margin:8px 0 0">GPS viser, at bilen står ca. ${fmtDist(d)} fra <b>${esc(l.navn)}</b>.${m?` Den passer med <b>${esc(m.l.navn)}</b>. <button class="btn small" data-act="useloc" data-id="${esc(m.l.id)}">Vælg ${esc(m.l.navn)}</button>`:" Tjek at du har valgt den rigtige lokation."}</div>`;
+    } else if(st.auto===st.loc && !st.manual){
+      html=`<div class="tiny mut" style="margin-top:6px">Valgt automatisk ud fra GPS (${fmtDist(d)} fra lokationens midte).</div>`;
+    }
+  } else if(GPS.pos && st.loc && !SPECIAL[st.loc] && l && !hasPos(l) && isAdmin()){
+    html=`<div class="tiny mut" style="margin-top:6px">${esc(l.navn)} har ingen GPS-position, så valget kan ikke tjekkes. Sæt den under Indstillinger → Lokationer.</div>`;
+  }
+  el.innerHTML=html;
+  const b=$("#savemove")||$("#savecreate");
+  if(b && !b.textContent.startsWith("Gemmer") && !b.textContent.startsWith("Opretter")) b.textContent = $("#savemove") ? (st.mismatch&&st.warnAck?"Gem alligevel":"Gem placering") : (st.mismatch&&st.warnAck?"Opret alligevel":"Opret bil");
+}
+function fmtDist(m){ return m>=1000 ? (m/1000).toFixed(1).replace(".",",")+" km" : Math.round(m)+" m"; }
 function gpsStart(){
   GPS.pos=null; GPS.err=null;
   if(!("geolocation" in navigator)){ GPS.err="Telefonen understøtter ikke placering"; gpsShow(); return; }
@@ -383,6 +432,7 @@ function gpsShow(){
   if(GPS.pos) el.innerHTML = `<span class="pill ${GPS.pos.acc<=25?"ok":"warn"}">GPS ±${GPS.pos.acc} m</span> ${GPS.busy?'<span class="tiny mut">forbedrer…</span>':'<span class="tiny mut">gemmes sammen med placeringen</span>'}`;
   else if(GPS.err) el.innerHTML = `<span class="pill warn">Ingen GPS</span> <span class="tiny mut">${esc(GPS.err)}</span>`;
   else el.innerHTML = GPS.busy ? `<span class="pill grey">Henter GPS…</span>` : `<span class="pill warn">Ingen GPS fundet</span>`;
+  gpsHook();
 }
 function mapLink(v, label){
   if(v.gpsLat===""||v.gpsLat==null||v.gpsLng===""||v.gpsLng==null) return "";
@@ -535,7 +585,7 @@ function viewSettings(){
     <h2>Lokationer</h2>
     <div class="stack">${sortLocs(S.locations).map(l=>`
       <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
-        <div class="grow"><div style="font-weight:700">${esc(l.navn)}</div><div class="tiny mut">${tname[l.type]||""}${l.adresse?" · "+esc(l.adresse):""}</div></div>
+        <div class="grow"><div style="font-weight:700">${esc(l.navn)}</div><div class="tiny mut">${tname[l.type]||""}${l.adresse?" · "+esc(l.adresse):""} ${hasPos(l)?`<span class="pill ok">GPS · ${esc(l.radius||RADIUS_STD)} m</span>`:(l.type!=="noegle"?'<span class="pill warn">Ingen GPS-position</span>':"")}</div></div>
         <button class="btn" data-editloc="${esc(l.id)}">Ret</button>
       </div>`).join("") || '<div class="mut small">Ingen lokationer endnu.</div>'}</div>
     <button class="btn pri block" style="margin-top:14px" data-editloc="">+ Ny lokation</button>
@@ -546,6 +596,7 @@ function viewSettings(){
 function openLocEditor(id){
   const l = id ? S.locations.find(x=>x.id===id) : {navn:"",type:"begge",adresse:""};
   if(!l) return;
+  S.locEdit = {pos:null, clear:false}; S.moveState = null; S.createState = null;
   const used = id ? [...S.vehicles.values()].filter(v=>v.lokation===id || keysOf(v).some(k=>k.lokation===id)).length : 0;
   openSheet(`
     <div class="hd"><h2>${id?"Ret lokation":"Ny lokation"}</h2><button class="x" data-close>×</button></div>
@@ -553,6 +604,17 @@ function openLocEditor(id){
     <label class="f">Bruges til</label>
     <div class="seg" id="lt">${[["begge","Biler + nøgler"],["bil","Kun biler"],["noegle","Kun nøgler"]].map(([k,t])=>`<button data-lt="${k}" class="${l.type===k?"on":""}">${t}</button>`).join("")}</div>
     <label class="f">Adresse / beskrivelse (valgfri)</label><input type="text" id="la" value="${esc(l.adresse||"")}">
+    <div id="locgps" ${l.type==="noegle"?'style="display:none"':""}>
+      <label class="f">GPS-område (bruges til at vælge lokationen automatisk, når en bil scannes)</label>
+      <div class="small mut" id="locposinfo">${hasPos(l)?`Position gemt · <a href="https://www.google.com/maps/search/?api=1&query=${l.lat},${l.lng}" target="_blank" rel="noopener">vis på kort</a>`:"Ingen position endnu. Stil dig midt på pladsen og tryk knappen."}</div>
+      <div id="gpsstat" style="margin:6px 0"></div>
+      <div class="row" style="gap:8px">
+        <button class="btn grow" data-act="locpos">${hasPos(l)?"Opdatér til min position":"Brug min position"}</button>
+        ${hasPos(l)?'<button class="btn" data-act="locposclr">Fjern</button>':""}
+      </div>
+      <label class="f">Radius i meter</label><input type="number" id="lr" min="10" max="2000" step="5" value="${esc(l.radius||RADIUS_STD)}" inputmode="numeric">
+      <div class="tiny mut">Hvor langt fra punktet en bil må stå og stadig høre til lokationen. Typisk 30–150 m.</div>
+    </div>
     <button class="btn pri block" style="margin-top:16px" data-act="saveloc" data-id="${esc(id||"")}">Gem</button>
     ${id?`<div id="delwrap" style="margin-top:10px"><button class="btn dan block" data-act="delloc" data-id="${esc(id)}">Slet lokation</button>${used?`<div class="tiny mut" style="margin-top:6px">${used} biler/nøgler står her. De vises som "Slettet lokation", til de flyttes.</div>`:""}</div>`:""}`);
 }
@@ -640,7 +702,7 @@ function openSheet(html){
   $("#sheetroot").innerHTML = `<div class="sheetwrap" data-closebg><div class="sheet" role="dialog">${html}</div></div>`;
   S.sheetOpen = true; document.body.style.overflow="hidden";
 }
-function closeSheet(){ gpsStop(); stopCam(); $("#sheetroot").innerHTML=""; S.sheetOpen=false; S.moveState=null; S.createState=null; document.body.style.overflow=""; }
+function closeSheet(){ gpsStop(); stopCam(); $("#sheetroot").innerHTML=""; S.sheetOpen=false; S.moveState=null; S.createState=null; S.locEdit=null; document.body.style.overflow=""; }
 function locGrid(kind, selected, includeSpecial){
   const locs = kind==="bil" ? carLocs() : keyLocs();
   const last = store("lastloc_"+kind);
@@ -657,6 +719,7 @@ function openMove(id, target){
   const v = S.vehicles.get(id); if(!v) return;
   const keys = keysOf(v); const keyNs = keys.length ? keys.map(k=>k.n) : ["1"];
   const st = {id, target: target || "bil", loc:null};
+  S.createState = null; S.locEdit = null;
   const isCar = st.target==="bil";
   const cur0 = isCar ? v.lokation : (((v.noegler||{})[st.target.slice(1)])||{}).lokation;
   const validLocs = (isCar?carLocs():keyLocs()).map(l=>l.id).concat([isCar?"_ude":"_hos"]);
@@ -674,6 +737,7 @@ function openMove(id, target){
     ${isCar?`<div id="gpsstat" style="margin:-2px 0 6px"></div>${mapLink(v,"Sidste GPS-position")}`:""}
     <label class="f">Hvor er ${isCar?"bilen":"nøglen"} nu?</label>
     ${locGrid(isCar?"bil":"noegle", st.loc, true)}
+    ${isCar?'<div id="locwarn"></div>':""}
     <label class="f">${isCar?"Plads / række (valgfri)":"Krog / skuffe / bemærkning (valgfri)"}</label>
     <input type="text" id="plads" placeholder="${isCar?"Fx Række C, plads 12":"Fx Krog 14"}" value="${st.loc && st.loc===cur.lokation ? esc(cur.plads||"") : ""}">
     ${v.status!=="Udleveret" ? `<div class="row" style="margin-top:10px"><span class="small mut grow">Status:</span><select id="qstatus" style="width:auto">${STATUS.map(s=>`<option ${v.status===s?"selected":""}>${s}</option>`).join("")}</select></div>`:""}
@@ -684,6 +748,7 @@ function openMove(id, target){
 }
 async function saveMove(){
   const st=S.moveState; if(!st||!st.loc) return;
+  if(st.target==="bil" && st.mismatch && !st.warnAck){ st.warnAck=true; locCheck(); toast("GPS passer ikke med lokationen – tryk igen for at gemme alligevel"); return; }
   const v=S.vehicles.get(st.id);
   const plads=($("#plads")?.value||"").trim();
   const qs=$("#qstatus"); const status = qs && qs.value!==v.status ? qs.value : "";
@@ -698,6 +763,7 @@ function openCreate(pref){
   pref = pref || {};
   const vin = pref.vin || "";
   const st = {loc:null, kat:"ny", nkeys:1};
+  S.moveState = null; S.locEdit = null;
   openSheet(`
     <div class="hd"><h2>Ny bil</h2><button class="x" data-close>×</button></div>
     ${pref.note?`<div class="banner info">${esc(pref.note)}</div>`:""}
@@ -718,6 +784,7 @@ function openCreate(pref){
     <div id="gpsstat" style="margin-top:12px"></div>
     <label class="f">Hvor står bilen?</label>
     ${locGrid("bil", null, false)}
+    <div id="locwarn"></div>
     <label class="f">Plads / række (valgfri)</label><input type="text" id="cpl" placeholder="Fx Række C, plads 12">
     <label class="row small" style="margin-top:12px;gap:8px"><input type="checkbox" id="ckeysame" checked style="width:20px;height:20px"> Nøglerne ligger samme sted som bilen</label>
     <label class="f">Note (valgfri)</label><textarea id="cno" placeholder="Fx byttebil fra kunde, mangler service…"></textarea>
@@ -730,6 +797,7 @@ async function saveCreate(){
   const vin = normVin($("#cvin").value), reg = $("#creg").value.trim().toUpperCase();
   if(vin.length!==17 && !reg){ toast("Angiv stelnummer (17 tegn) eller reg.nr."); return; }
   if(!st.loc){ toast("Vælg hvor bilen står"); return; }
+  if(st.mismatch && !st.warnAck){ st.warnAck=true; locCheck(); toast("GPS passer ikke med lokationen – tryk igen for at oprette alligevel"); return; }
   const id = vin.length===17 ? vin : "REG-"+reg.replace(/[^A-Z0-9]/g,"");
   if(S.vehicles.has(id)){ toast("Bilen findes allerede"); openMove(id,"bil"); return; }
   const keySame = $("#ckeysame").checked;
@@ -916,13 +984,14 @@ document.addEventListener("click", async ev=>{
     document.querySelectorAll("#locgrid .locbtn").forEach(b=>b.classList.toggle("on", b===t));
     if(S.moveState && $("#savemove")){ S.moveState.loc=d.loc; $("#savemove").disabled=false; }
     if(S.createState && $("#savecreate")){ S.createState.loc=d.loc; $("#savecreate").disabled=false; }
+    const ps=curPick(); if(ps){ ps.manual=true; ps.warnAck=false; locCheck(); }
     return;
   }
   if(d.tg){ openMove(S.moveState.id, d.tg); return; }
   if(d.kat){ S.createState.kat=d.kat; t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t));
     S.createState.nkeys = d.kat==="demo"?2:1; document.querySelectorAll("#cnk button").forEach(b=>b.classList.toggle("on", +b.dataset.nk===S.createState.nkeys)); return; }
   if(d.nk){ S.createState.nkeys=+d.nk; t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t)); return; }
-  if(d.lt || d.er){ t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t)); return; }
+  if(d.lt || d.er){ t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t)); if(d.lt && $("#locgps")) $("#locgps").style.display = d.lt==="noegle"?"none":""; return; }
   if(d.editloc!==undefined){ openLocEditor(d.editloc); return; }
   if(d.editemp!==undefined){ openEmpEditor(d.editemp); return; }
   const a = d.act; if(!a) return;
@@ -933,12 +1002,17 @@ document.addEventListener("click", async ev=>{
   else if(a==="manual"){ manualLookup($("#manual").value); }
   else if(a==="new"){ openCreate({}); }
   else if(a==="clearspecial"){ S.f.special=""; render(); }
+  else if(a==="useloc"){ const ps=curPick(); selectLoc(d.id); if(ps){ ps.manual=true; ps.warnAck=false; } locCheck(); }
   else if(a==="savemove"){ saveMove(); }
   else if(a==="savecreate"){ saveCreate(); }
   else if(a==="saveloc"){
     const type=($("#lt .on")||{dataset:{}}).dataset.lt||"begge"; t.disabled=true;
-    if(await write("gemLokation",{id:d.id||"", navn:$("#ln").value, type, adresse:$("#la").value},"Lokation gemt")) closeSheet(); else t.disabled=false;
+    const le=S.locEdit||{}; const p={id:d.id||"", navn:$("#ln").value, type, adresse:$("#la").value};
+    if(type!=="noegle"){ p.radius=$("#lr").value; if(le.clear) p.rydPos=true; else if(le.pos){ p.lat=le.pos.lat; p.lng=le.pos.lng; } }
+    if(await write("gemLokation",p,"Lokation gemt")) closeSheet(); else t.disabled=false;
   }
+  else if(a==="locpos"){ S.locEdit.clear=false; S.locEdit.want=true; gpsStart(); }
+  else if(a==="locposclr"){ gpsStop(); S.locEdit={pos:null, clear:true}; $("#gpsstat").innerHTML=""; $("#locposinfo").textContent="Positionen fjernes, når du trykker Gem."; }
   else if(a==="delloc"){ $("#delwrap").innerHTML = `<div class="row"><span class="small grow">Slet lokationen?</span><button class="btn" data-close>Nej</button><button class="btn dan" data-act="delloc2" data-id="${esc(d.id)}">Ja, slet</button></div>`; }
   else if(a==="delloc2"){ if(await write("sletLokation",{id:d.id},"Lokation slettet")) closeSheet(); }
   else if(a==="saveemp"){
