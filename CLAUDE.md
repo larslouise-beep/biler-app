@@ -25,7 +25,7 @@ Design: Toyota brand visual identity (Signature Grey #282830, Signature Red #FF0
 - Regneark-URL: https://docs.google.com/spreadsheets/d/1UrxFzWHeYyuXETgCfJteIR3d02yuSbl9ycsii5wHacM/edit
 - Apps Script deployment-id: AKfycbwN2dV9b_Os1h5gzwxBpuffXHuAHctgAK30E7TaNP9qznT1j9ra-OxJ0tpspZKEr_ItDA (script-id: 1A0hOVX08LDpV3GeSZLJ_1LnNJYqCaUtgke5EcuI0Ofv8z2ohMOcXOfQS)
 - API_URL (/exec): https://script.google.com/macros/s/AKfycbwN2dV9b_Os1h5gzwxBpuffXHuAHctgAK30E7TaNP9qznT1j9ra-OxJ0tpspZKEr_ItDA/exec
-- GitHub Pages-URL:
+- GitHub Pages-URL: https://larslouise-beep.github.io/biler-app/ (repo: https://github.com/larslouise-beep/biler-app)
 
 ## Regler
 - Bevar dataformatet i arket (kolonnenavne i række 1). Nye kolonner tilføjes bagerst og i `ARK` i Code.gs.
