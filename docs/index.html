@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#282830">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Biler & nøgler">
+<title>Bil- og nøgleoversigt</title>
+<style>
+/* Toyota brand visual identity: Signature Grey #282830, TME Signature Red #FF0022, TME Grey 1–6 */
+:root{
+  --tgrey:#282830;--tred:#FF0022;--g1:#494950;--g2:#6A6B70;--g3:#8B8C90;--g4:#ADADB0;--g5:#CECFD0;--g6:#EFF0F0;
+  --bg:var(--g6);--card:#fff;--ink:var(--tgrey);--mut:var(--g2);--line:var(--g5);
+  --acc:var(--tgrey);--acc2:var(--g6);--onacc:#fff;
+  --ok:#1d6b43;--okbg:#e3efe8;--warn:#8a5a00;--warnbg:#f6ecd6;--bad:#c4001a;--badbg:#fde6e9;
+  --r:2px;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:var(--tgrey);--card:#34343c;--ink:#fff;--mut:var(--g4);--line:var(--g1);
+  --acc:#fff;--acc2:var(--g1);--onacc:var(--tgrey);
+  --ok:#7fd3a3;--okbg:#26392f;--warn:#f0c26a;--warnbg:#3d3424;--bad:#ff6b7d;--badbg:#45262c;
+}}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.4 Lato,"Toyota Type",system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+header{position:sticky;top:0;z-index:5;background:var(--tgrey);color:#fff;border-bottom:3px solid var(--tred);padding:12px 16px;display:flex;align-items:center;gap:10px}
+header h1{font-size:17px;line-height:1.15;font-weight:300;letter-spacing:.06em;text-transform:uppercase;margin:0;flex:1}
+header h1 small{display:block;font-size:10px;font-weight:700;letter-spacing:.14em;color:var(--g4)}
+.sync{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--g4);display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--g3)}
+.dot.on{background:#4cc27f}.dot.err{background:var(--tred)}
+main{max-width:900px;margin:0 auto;padding:16px 14px 110px}
+nav.tabs{position:fixed;bottom:0;left:0;right:0;z-index:6;background:var(--card);border-top:1px solid var(--line);display:flex;justify-content:space-around;align-items:flex-end;padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+nav.tabs button{background:none;border:0;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--g3);padding:4px 8px;cursor:pointer;min-width:62px;border-top:2px solid transparent}
+nav.tabs button.on{color:var(--ink);font-weight:700;border-top-color:var(--tred)}
+nav.tabs svg{width:22px;height:22px;stroke-width:1.6}
+nav.tabs .scanbtn{background:var(--tred);color:#fff;border-radius:50%;width:62px;height:62px;margin-top:-26px;justify-content:center;box-shadow:0 4px 14px rgba(40,40,48,.35);border:0}
+nav.tabs .scanbtn svg{width:26px;height:26px;stroke-width:1.8}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:16px}
+.stack>*+*{margin-top:10px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.grow{flex:1;min-width:0}
+.mut{color:var(--mut)}.small{font-size:13px}.tiny{font-size:12px}
+h2{font-size:18px;font-weight:300;letter-spacing:.05em;text-transform:uppercase;margin:4px 0 10px}
+h3{font-size:12px;font-weight:700;margin:18px 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.1em}
+input[type=text],input[type=search],input[type=number],select,textarea{width:100%;padding:11px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--card)}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--ink)}
+textarea{min-height:64px;resize:vertical}
+label.f{display:block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:12px 0 5px}
+.btn{border:1px solid var(--ink);background:transparent;border-radius:var(--r);padding:10px 16px;cursor:pointer;font-weight:400;letter-spacing:.02em}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:var(--onacc);text-transform:uppercase;letter-spacing:.08em;font-size:14px}
+.btn.dan{color:var(--bad);border-color:var(--bad);background:transparent}
+.btn.block{width:100%;padding:14px}
+.btn:disabled{opacity:.4;cursor:default}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:var(--r);padding:7px 12px;white-space:nowrap;cursor:pointer;font-size:13px}
+.chip.on{background:var(--acc);border-color:var(--acc);color:var(--onacc)}
+.pill{display:inline-block;font-size:11px;letter-spacing:.04em;padding:2px 8px;border-radius:var(--r);background:var(--g6);color:var(--tgrey);white-space:nowrap;border:1px solid var(--line)}
+.pill.ok{background:var(--okbg);color:var(--ok);border-color:transparent}.pill.warn{background:var(--warnbg);color:var(--warn);border-color:transparent}.pill.bad{background:var(--tred);color:#fff;border-color:transparent}.pill.grey{background:transparent;color:var(--mut)}
+@media (prefers-color-scheme:dark){.pill{background:var(--g1);color:#fff}}
+.veh{display:block;width:100%;text-align:left;cursor:pointer;background:var(--card);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:var(--r);padding:12px 14px;transition:border-color .15s}
+.veh:hover{border-left-color:var(--tred)}
+.veh+.veh{margin-top:8px}
+.veh .t{font-weight:700}
+.loc{display:flex;gap:6px;align-items:flex-start;font-size:14px;margin-top:4px}
+.loc svg{width:16px;height:16px;flex:none;margin-top:2px;color:var(--mut);stroke-width:1.6}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+.locbtn{border:1px solid var(--line);background:var(--card);border-radius:var(--r);padding:12px;text-align:left;cursor:pointer;min-height:52px}
+.locbtn.on{border-color:var(--acc);background:var(--acc);color:var(--onacc);font-weight:700}
+.locbtn.on .mut{color:inherit;opacity:.75}
+.locbtn .tiny{display:block;font-weight:400}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px;cursor:pointer;text-align:left}
+.stat b{font-size:30px;font-weight:300;display:block;line-height:1.1}
+.stat span{text-transform:uppercase;letter-spacing:.06em;font-size:11px}
+.seg{display:flex;border:1px solid var(--ink);border-radius:var(--r);overflow:hidden}
+.seg button{flex:1;border:0;background:var(--card);padding:10px 6px;cursor:pointer;border-right:1px solid var(--ink);font-size:14px}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--acc);color:var(--onacc);font-weight:700}
+.banner{border-radius:var(--r);padding:10px 12px;font-size:14px;margin-bottom:12px;border-left:3px solid currentColor}
+.banner.warn{background:var(--warnbg);color:var(--warn)}.banner.bad{background:var(--badbg);color:var(--bad)}.banner.info{background:var(--card);color:var(--ink);border-left-color:var(--tred)}
+.sheetwrap{position:fixed;inset:0;z-index:20;background:rgba(40,40,48,.6);display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--bg);width:100%;max-width:640px;max-height:92vh;overflow:auto;border-radius:4px 4px 0 0;border-top:3px solid var(--tred);padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+@media (min-width:700px){.sheetwrap{align-items:center}.sheet{border-radius:2px}}
+.sheet .hd{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.sheet .hd h2{flex:1;margin:0}
+.x{background:none;border:0;font-size:28px;font-weight:300;line-height:1;cursor:pointer;color:var(--mut);padding:0 4px}
+.hist{font-size:13px;border-left:2px solid var(--tred);padding-left:12px}
+.hist div+div{margin-top:8px}
+.toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:var(--tgrey);color:#fff;border-left:3px solid var(--tred);padding:10px 16px;border-radius:var(--r);z-index:30;font-size:14px;max-width:90vw;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.spin{width:28px;height:28px;border:2px solid var(--line);border-top-color:var(--tred);border-radius:50%;animation:s 1s linear infinite;margin:20px auto}
+@keyframes s{to{transform:rotate(360deg)}}
+.empty{text-align:center;padding:30px 10px;color:var(--mut)}
+.vin{font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em}
+table.lbl{width:100%;border-collapse:collapse;font-size:14px;background:var(--card);border:1px solid var(--line)}
+table.lbl thead td{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
+table.lbl td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.lbl input{width:20px;height:20px;accent-color:var(--tgrey)}
+input[type=checkbox]{accent-color:var(--tgrey)}
+.hidden{display:none!important}
+</style>
+<style>
+.login{max-width:420px;margin:20px auto}
+.pinfield{font-size:28px!important;letter-spacing:.4em;text-align:center;padding:14px!important}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px}
+.keypad .btn{padding:16px 0;font-size:20px;font-weight:300}
+.keypad .btn.pri{font-size:15px}
+.userbtn{background:none;border:1px solid var(--g1);color:#fff;border-radius:var(--r);padding:5px 8px;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:12px}
+.userbtn svg{width:15px;height:15px}
+.userbtn b{font-weight:400;color:var(--g4);border-left:1px solid var(--g1);padding-left:6px}
+@media (max-width:420px){.userbtn span{display:none} header h1{font-size:14px}}
+a{color:inherit}
+/* etiketter 75 x 25 mm */
+.plabel{width:75mm;height:25mm;display:flex;align-items:center;gap:2.5mm;padding:0 2mm;background:#fff;color:#000;font-family:Helvetica,Arial,sans-serif;overflow:hidden;box-sizing:border-box}
+.pqr{width:21mm;height:21mm;flex:none}.pqr svg{width:100%;height:100%;display:block}
+.ptxt{min-width:0;flex:1;line-height:1.15}
+.ptxt div{white-space:nowrap;overflow:hidden;text-overflow:clip}
+.pk{font-weight:700;font-size:11pt}.p2{font-weight:700;font-size:9.5pt;margin-top:.6mm}.p3{font-size:7.5pt;margin-top:.4mm;min-height:1em}.pv{font-family:"Courier New",monospace;font-weight:700;font-size:7.5pt;margin-top:1.4mm}
+.pvwrap .plabel{border:1px solid var(--line);margin-bottom:8px;max-width:100%}
+#printarea{display:none}
+.camwrap{position:relative;background:#000;aspect-ratio:4/3;overflow:hidden;border-radius:var(--r)}
+.camwrap video{width:100%;height:100%;object-fit:cover;display:block}
+.camframe{position:absolute;inset:18% 22%;border:3px solid var(--tred);border-radius:6px;box-shadow:0 0 0 2000px rgba(0,0,0,.25)}
+.maplink{display:inline-block;text-decoration:none;margin:2px 0 4px}
+@media print{
+  @page{size:75mm 25mm;margin:0}
+  html,body{background:#fff!important;margin:0!important}
+  body>*:not(#printarea){display:none!important}
+  #printarea{display:block!important}
+  #printarea .plabel{page-break-after:always;break-after:page}
+  #printarea .plabel:last-child{page-break-after:auto;break-after:auto}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1><small>Frimann Biler</small>Bil- og nøgleoversigt</h1>
+  <div id="userbox"></div>
+  <div class="sync"><span class="dot" id="dot"></span><span id="synctxt"></span></div>
+</header>
+<main id="view"></main>
+<nav class="tabs hidden" id="tabs"></nav>
+<input type="file" id="cam" accept="image/*" capture="environment" class="hidden">
+<input type="file" id="pick" accept="image/*" class="hidden">
+<div id="sheetroot"></div>
+<div id="printarea"></div>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const now = () => Date.now();
+const ICON = {
+  car:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14v-5l-2-5H7l-2 5z"/><circle cx="7.5" cy="17.5" r="1.5"/><circle cx="16.5" cy="17.5" r="1.5"/><path d="M5 12h14"/></svg>',
+  key:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>',
+  scan:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 9v6M10 9v6M13 9v6M17 9v6"/></svg>',
+  home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+  list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>',
+  tag:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>',
+  user:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>'
+};
+function ago(ts){
+  if(!ts) return "";
+  const s = Math.round((now()-ts)/1000);
+  if(s < 60) return "lige nu";
+  const m = Math.round(s/60); if(m < 60) return m + " min. siden";
+  const h = Math.round(m/60); if(h < 24) return h + " t. siden";
+  const d = Math.round(h/24); if(d < 30) return d + (d===1?" dag":" dage") + " siden";
+  return new Date(ts).toLocaleDateString("da-DK");
+}
+function fmtTime(ts){ return new Date(ts).toLocaleString("da-DK",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}); }
+function store(k,v){ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v);}catch(e){ return null; } }
+let toastT;
+function toast(msg){
+  let t = $("#toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.className="toast"; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.remove("hidden"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.add("hidden"),2800);
+}
+function loadScript(src){
+  return new Promise((res,rej)=>{ if(document.querySelector('script[src="'+src+'"]')) return res();
+    const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=()=>rej(new Error("Kunne ikke hente "+src)); document.head.appendChild(s); });
+}
+
+// ---------- VIN ----------
+const WMI = {JTD:"Toyota",JTE:"Toyota",JTM:"Toyota",JTN:"Toyota",JTK:"Toyota",JTL:"Toyota",JTH:"Lexus",JTJ:"Lexus",SB1:"Toyota",VNK:"Toyota",NMT:"Toyota",TMB:"Skoda",WVW:"Volkswagen",WVG:"Volkswagen",WV1:"VW Erhverv",WV2:"VW Erhverv",WAU:"Audi",WUA:"Audi",VSS:"Cupra/Seat",WBA:"BMW",WBY:"BMW",WMW:"Mini",WDD:"Mercedes-Benz",W1K:"Mercedes-Benz",W1N:"Mercedes-Benz",WDC:"Mercedes-Benz",YV1:"Volvo",LYV:"Volvo",VF1:"Renault",UU1:"Dacia",VF3:"Peugeot",VR3:"Peugeot",VF7:"Citroën",VR7:"Citroën",ZFA:"Fiat",KMH:"Hyundai",TMA:"Hyundai",KNA:"Kia",U5Y:"Kia",KNE:"Kia",JMZ:"Mazda",JN1:"Nissan",SJN:"Nissan",WF0:"Ford",W0L:"Opel",W0V:"Opel",JMB:"Mitsubishi",JHM:"Honda",SHH:"Honda",XP7:"Tesla",LRW:"Tesla","5YJ":"Tesla",LSJ:"MG",TSM:"Suzuki",JSA:"Suzuki",SAL:"Land Rover",SAJ:"Jaguar",WP0:"Porsche",WP1:"Porsche",ZAR:"Alfa Romeo",VSK:"Nissan",LVS:"Ford",YS3:"Saab",WDB:"Mercedes-Benz",LPS:"Polestar",YSM:"Polestar",LBV:"BMW"};
+function makeFromVin(vin){ return WMI[vin.slice(0,3)] || (vin.startsWith("JT") ? "Toyota" : ""); }
+const VIN_RE = /[A-HJ-NPR-Z0-9]{17}/;
+function normVin(s){
+  let v = String(s||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  if(v.length===18 && v[0]==="I") v = v.slice(1); // US-style "I"-prefix i Code 39
+  return v;
+}
+function findVin(text){
+  const t = String(text||"").toUpperCase();
+  const clean = normVin(t);
+  if(clean.length===17 && VIN_RE.test(clean)) return clean;
+  const m = t.replace(/[^A-Z0-9]/g," ").split(/\s+/).map(normVin).find(x=>x.length===17 && VIN_RE.test(x));
+  if(m) return m;
+  const m2 = t.replace(/[^A-Z0-9]/g,"").match(VIN_RE);
+  return m2 ? m2[0] : null;
+}
+// QR-format fra egne etiketter: FB:B:<id>  eller  FB:N1:<id>
+function parseCode(text){
+  const t = String(text||"").trim();
+  if(/^https?:\/\//i.test(t)){ try{ const u=new URL(t); const b=u.searchParams.get("b"); if(b) return {id:b.toUpperCase(), target:u.searchParams.get("n")?"n"+u.searchParams.get("n"):"bil", raw:t}; }catch(e){} }
+  const m = t.match(/^FB:(B|N\d):([A-Za-z0-9._~:@+-]+)$/i);
+  if(m) return {id:m[2].toUpperCase(), target: m[1].toUpperCase()==="B" ? "bil" : "n"+m[1].slice(1), raw:t};
+  const vin = findVin(t);
+  if(vin) return {id:vin, target:"bil", raw:t};
+  return null;
+}
+
+
+// ---------- konfiguration ----------
+// Indsæt URL'en fra Apps Script (Implementér → webapp-URL, slutter på /exec):
+const API_URL = "https://script.google.com/macros/s/AKfycbwN2dV9b_Os1h5gzwxBpuffXHuAHctgAK30E7TaNP9qznT1j9ra-OxJ0tpspZKEr_ItDA/exec";
+const AUTO_LOGUD_MIN = 10;     // log automatisk ud efter så mange minutters inaktivitet
+const OPDATER_SEK = 20;        // hent ændringer fra andre så ofte
+
+// ---------- state ----------
+const STATUS = ["Ankommet","Klargøring","Klar til salg","Solgt","Udleveret"];
+const STATUS_CLS = {"Ankommet":"","Klargøring":"warn","Klar til salg":"ok","Solgt":"bad","Udleveret":"grey"};
+const KAT = {ny:"Ny", brugt:"Brugt", demo:"Demo"};
+const SPECIAL = { "_ude":"Ude af huset", "_hos":"Hos medarbejder" };
+const S = {
+  token:null, me:null, vehicles:new Map(), locations:[], employees:[], arkUrl:"", loaded:false, err:null,
+  tab:"oversigt", f:{q:"", lok:"", status:"aktive", kat:"", special:""},
+  lbl:{q:"", sel:{}}, login:{list:[], valgt:null}
+};
+
+// ---------- server ----------
+async function api(action, payload){
+  if(!/^https:\/\/script\.google(usercontent)?\.com\//.test(API_URL)) throw {error:"OPSAETNING", besked:"API_URL er ikke sat i index.html – se opsætningsguiden."};
+  let r;
+  try{
+    const resp = await fetch(API_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body: JSON.stringify({action, token:S.token, payload:payload||{}})});
+    r = await resp.json();
+  }catch(e){ throw {error:"NET", besked:"Ingen forbindelse til serveren. Prøv igen."}; }
+  if(r && r.error){ if(r.error==="AUTH" && action!=="login") logout(true); throw r; }
+  return r;
+}
+function applyData(d){
+  if(!d || !d.ok) return;
+  S.me = d.me; S.arkUrl = d.arkUrl || "";
+  S.locations = d.lokationer || [];
+  S.employees = d.medarbejdere || [];
+  S.vehicles = new Map((d.biler||[]).map(v=>[v.id, v]));
+  S.loaded = true; S.err = null;
+  setSync(); refresh();
+}
+async function write(action, payload, okMsg){
+  try{ const d = await api(action, payload); applyData(d); if(okMsg) toast(okMsg); return true; }
+  catch(e){ toast(e.besked || "Kunne ikke gemme."); return false; }
+}
+let pollT=null;
+function startPoll(){
+  clearInterval(pollT);
+  pollT = setInterval(()=>{ if(S.token && document.visibilityState==="visible" && !S.sheetOpen) reload(); }, OPDATER_SEK*1000);
+}
+async function reload(){
+  try{ applyData(await api("data")); }
+  catch(e){ if(e.error!=="AUTH"){ S.err = e.besked || "Ingen forbindelse"; setSync(); } }
+}
+
+// ---------- login / logud ----------
+// Login gemmes på telefonen, så et scan via kameraet (ny fane) ikke kræver nyt login – men udløber efter inaktivitet
+function sess(v){
+  try{
+    if(v===undefined){ const t=localStorage.getItem("fb_token"), a=+localStorage.getItem("fb_active")||0; return t && now()-a < AUTO_LOGUD_MIN*60000 ? t : null; }
+    if(v===null){ localStorage.removeItem("fb_token"); localStorage.removeItem("fb_active"); }
+    else { localStorage.setItem("fb_token", v); localStorage.setItem("fb_active", String(now())); }
+  }catch(e){ return null; }
+}
+let idleT=null, lastStamp=0;
+function bumpIdle(){
+  if(!S.token) return;
+  if(now()-lastStamp>15000){ lastStamp=now(); try{ localStorage.setItem("fb_active", String(now())); }catch(e){} }
+  clearTimeout(idleT);
+  idleT = setTimeout(()=>{ logout(false); toast("Du er logget ud pga. inaktivitet"); }, AUTO_LOGUD_MIN*60000);
+}
+["click","keydown","touchstart","scroll"].forEach(ev=>document.addEventListener(ev, bumpIdle, {passive:true}));
+async function logout(expired){
+  const t = S.token;
+  S.token=null; S.me=null; S.loaded=false; S.vehicles=new Map(); sess(null);
+  clearInterval(pollT); clearTimeout(idleT); closeSheet();
+  if(t && !expired) fetch(API_URL,{method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify({action:"logout",token:t})}).catch(()=>{});
+  if(expired) toast("Log ind igen");
+  showLogin();
+}
+async function showLogin(){
+  $("#tabs").classList.add("hidden"); $("#userbox").innerHTML="";
+  S.login.valgt=null;
+  $("#view").innerHTML = `<div class="login"><h2>Log ind</h2><div class="small mut" style="margin-bottom:14px">Vælg dit navn</div><div class="spin"></div></div>`;
+  try{
+    const r = await api("medarbejderListe");
+    S.login.list = r.liste || [];
+    drawLogin();
+  }catch(e){ $("#view").innerHTML = `<div class="banner bad">${esc(e.besked||"Kunne ikke hente medarbejdere")}</div><button class="btn" data-act="retrylogin">Prøv igen</button>`; }
+}
+function drawLogin(){
+  const v = S.login.valgt && S.login.list.find(x=>x.id===S.login.valgt);
+  if(!v){
+    $("#view").innerHTML = `<div class="login"><h2>Log ind</h2><div class="small mut" style="margin-bottom:14px">Vælg dit navn</div>
+      <div class="grid">${S.login.list.map(e=>`<button class="locbtn" data-loginid="${esc(e.id)}">${esc(e.navn)}</button>`).join("") || '<div class="mut">Ingen medarbejdere oprettet.</div>'}</div></div>`;
+    return;
+  }
+  $("#view").innerHTML = `<div class="login"><h2>Hej ${esc(v.navn)}</h2><div class="small mut" style="margin-bottom:14px">Indtast din PIN-kode</div>
+    <input type="password" id="pin" inputmode="numeric" autocomplete="off" maxlength="8" class="pinfield" placeholder="••••">
+    <div class="keypad">${[1,2,3,4,5,6,7,8,9,"C",0,"OK"].map(k=>`<button class="${k==="OK"?"btn pri":"btn"}" data-key="${k}">${k==="C"?"Ryd":k}</button>`).join("")}</div>
+    <div id="pinerr" class="small" style="color:var(--bad);min-height:20px;margin-top:8px"></div>
+    <button class="btn block" data-act="loginback">Ikke dig? Vælg et andet navn</button></div>`;
+  setTimeout(()=>$("#pin") && $("#pin").focus(), 50);
+}
+async function doLogin(){
+  const pin = $("#pin").value.trim(); if(!pin) return;
+  $("#pinerr").textContent = "Logger ind…";
+  try{
+    const r = await api("login", {id:S.login.valgt, pin});
+    S.token = r.token; sess(r.token);
+    await afterLogin();
+  }catch(e){ $("#pinerr").textContent = e.besked || "Kunne ikke logge ind"; $("#pin").value=""; }
+}
+async function afterLogin(){
+  $("#tabs").classList.remove("hidden");
+  S.tab="oversigt"; render();
+  try{ applyData(await api("data")); }catch(e){ if(e.error!=="AUTH"){ S.err=e.besked; render(); } return; }
+  startPoll(); bumpIdle();
+  if(S.pending){ const p=S.pending; S.pending=null; goToCode(p); }
+}
+
+// ---------- hjælpere ----------
+function locName(id){
+  if(!id) return "Ikke registreret";
+  if(SPECIAL[id]) return SPECIAL[id];
+  const l = S.locations.find(x=>x.id===id); return l ? l.navn : "Slettet lokation";
+}
+function empName(id, fallback){
+  if(!id) return fallback || "";
+  if(S.me && id===S.me.id) return "dig";
+  const e = S.employees.find(x=>x.id===id); return e ? e.navn : (fallback || "tidligere medarbejder");
+}
+function vlabel(v){ return [v.maerke, v.model].filter(Boolean).join(" ") || "Ukendt bil"; }
+function keysOf(v){ const k = v.noegler || {}; return Object.keys(k).filter(n=>k[n] && typeof k[n]==="object").sort().map(n => ({n, ...k[n]})); }
+function keyName(v, n, form){
+  const cnt = Math.max(1, keysOf(v).length);
+  if(cnt===1) return form==="label" ? "NØGLER" : "Nøgler";
+  const nm = n==="1" ? "daglig" : n==="2" ? "reserve" : "";
+  if(form==="label") return ("NØGLE "+n+(nm?" – "+nm:"")).toUpperCase();
+  if(form==="short") return nm ? nm[0].toUpperCase()+nm.slice(1) : "Nøgle "+n;
+  return "Nøgle "+n+(nm?" ("+nm+")":"");
+}
+function allKeysSel(v){ const o={}; (keysOf(v).length?keysOf(v).map(k=>k.n):["1"]).forEach(n=>o[n]=true); return o; }
+function isKeyLoc(id){ const l=S.locations.find(x=>x.id===id); return l && l.type==="noegle"; }
+function keyAwayFromCar(v){
+  return keysOf(v).some(k => k.lokation && v.lokation && v.lokation!=="_ude" && k.lokation !== v.lokation && !SPECIAL[k.lokation] && !isKeyLoc(k.lokation) && S.locations.some(l=>l.id===k.lokation));
+}
+function sortLocs(arr){ return arr.slice().sort((a,b)=>a.navn.localeCompare(b.navn,"da")); }
+function carLocs(){ return sortLocs(S.locations.filter(l=>l.type!=="noegle")); }
+function keyLocs(){ return sortLocs(S.locations.filter(l=>l.type!=="bil")); }
+const isAdmin = () => S.me && S.me.rolle==="admin";
+function whoWhen(af, afNavn, ts){ return ts ? `${esc(empName(af, afNavn))} · ${ago(ts)}` : ""; }
+
+// ---------- GPS ----------
+const GPS = {pos:null, err:null, busy:false, watch:null};
+function gpsStart(){
+  GPS.pos=null; GPS.err=null;
+  if(!("geolocation" in navigator)){ GPS.err="Telefonen understøtter ikke placering"; gpsShow(); return; }
+  GPS.busy=true; gpsShow();
+  gpsStop();
+  GPS.watch = navigator.geolocation.watchPosition(p=>{
+    const c=p.coords;
+    if(!GPS.pos || c.accuracy < GPS.pos.acc) GPS.pos={lat:c.latitude, lng:c.longitude, acc:Math.round(c.accuracy)};
+    GPS.busy = GPS.pos.acc > 15; gpsShow();
+    if(!GPS.busy) gpsStop();
+  }, e=>{ GPS.busy=false; GPS.err = e.code===1 ? "Placering er ikke tilladt – slå det til i browserens indstillinger" : "Kunne ikke finde placering"; gpsShow(); gpsStop(); },
+  {enableHighAccuracy:true, maximumAge:0, timeout:20000});
+  setTimeout(()=>{ if(GPS.busy){ GPS.busy=false; gpsStop(); gpsShow(); } }, 25000);
+}
+function gpsStop(){ if(GPS.watch!==null){ navigator.geolocation.clearWatch(GPS.watch); GPS.watch=null; } }
+function gpsShow(){
+  const el=$("#gpsstat"); if(!el) return;
+  if(GPS.pos) el.innerHTML = `<span class="pill ${GPS.pos.acc<=25?"ok":"warn"}">GPS ±${GPS.pos.acc} m</span> ${GPS.busy?'<span class="tiny mut">forbedrer…</span>':'<span class="tiny mut">gemmes sammen med placeringen</span>'}`;
+  else if(GPS.err) el.innerHTML = `<span class="pill warn">Ingen GPS</span> <span class="tiny mut">${esc(GPS.err)}</span>`;
+  else el.innerHTML = GPS.busy ? `<span class="pill grey">Henter GPS…</span>` : `<span class="pill warn">Ingen GPS fundet</span>`;
+}
+function mapLink(v, label){
+  if(v.gpsLat===""||v.gpsLat==null||v.gpsLng===""||v.gpsLng==null) return "";
+  return `<a class="btn small maplink" href="https://www.google.com/maps/dir/?api=1&destination=${v.gpsLat},${v.gpsLng}" target="_blank" rel="noopener">${label||"Find bilen på kort"}</a>`;
+}
+
+// ---------- render ----------
+const TABS = [
+  {id:"oversigt", label:"Oversigt", icon:"home"},
+  {id:"biler", label:"Biler", icon:"list"},
+  {id:"scan", label:"Scan", icon:"scan", cls:"scanbtn"},
+  {id:"etiketter", label:"Etiketter", icon:"tag"},
+  {id:"indstillinger", label:"Indstil.", icon:"gear"}
+];
+function setSync(){
+  const dot=$("#dot"), t=$("#synctxt");
+  if(S.err){ dot.className="dot err"; t.textContent="Offline"; }
+  else if(S.loaded){ dot.className="dot on"; t.textContent="Live"; }
+  else { dot.className="dot"; t.textContent="Henter…"; }
+}
+function renderTabs(){
+  $("#tabs").innerHTML = TABS.map(t=>`<button data-tab="${t.id}" class="${t.cls||""} ${S.tab===t.id?"on":""}" aria-label="${t.label}">${ICON[t.icon]}${t.cls?"":`<span>${t.label}</span>`}</button>`).join("");
+  $("#userbox").innerHTML = S.me ? `<button class="userbtn" data-act="logout" title="Log ud">${ICON.user}<span>${esc(S.me.navn)}</span><b>Log ud</b></button>` : "";
+}
+function render(){
+  if(!S.token) return;
+  renderTabs(); setSync();
+  const v = $("#view");
+  let pre = S.err ? `<div class="banner bad">${esc(S.err)}</div>` : "";
+  if(!S.loaded){ v.innerHTML = pre + `<div class="spin"></div>`; return; }
+  if(S.tab==="oversigt") v.innerHTML = pre + viewOverview();
+  else if(S.tab==="biler") { v.innerHTML = pre + viewList(); fillList(); }
+  else if(S.tab==="etiketter") { v.innerHTML = pre + viewLabels(); fillLabels(); }
+  else if(S.tab==="indstillinger") v.innerHTML = pre + viewSettings();
+}
+function refresh(){
+  if(!S.token) return;
+  if(S.tab==="biler" && $("#list")) { fillList(); renderTabs(); return; }
+  if(S.tab==="etiketter" && $("#lbllist")) { fillLabels(); return; }
+  if(document.activeElement && document.activeElement.closest && document.activeElement.closest("#view") && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+  render();
+}
+
+// ----- oversigt
+function viewOverview(){
+  const active = [...S.vehicles.values()].filter(v=>v.status!=="Udleveret");
+  if(!S.locations.length) return `<div class="card stack"><h2>Velkommen</h2><p>${isAdmin()?"Start med at oprette jeres lokationer og medarbejdere under Indstillinger.":"Der er ikke oprettet lokationer endnu. Bed en administrator om at oprette dem."}</p>${isAdmin()?'<button class="btn pri" data-tab="indstillinger">Gå til indstillinger</button>':""}</div>`;
+  const byLoc = {};
+  active.forEach(v=>{ const k=v.lokation||""; (byLoc[k] ||= {c:0,k:0}).c++; keysOf(v).forEach(x=>{ const kk=x.lokation||""; (byLoc[kk] ||= {c:0,k:0}).k++; }); });
+  const hos = active.reduce((n,v)=>n+keysOf(v).filter(k=>k.lokation==="_hos").length,0);
+  const away = active.filter(keyAwayFromCar).length;
+  const noKey = active.filter(v=>!keysOf(v).some(k=>k.lokation)).length;
+  const stats = [
+    {n:active.length, t:"Biler i alt", f:{}},
+    {n:active.filter(v=>v.status==="Klar til salg").length, t:"Klar til salg", f:{status:"Klar til salg"}},
+    {n:active.filter(v=>v.status==="Klargøring").length, t:"I klargøring", f:{status:"Klargøring"}},
+    {n:active.filter(v=>v.lokation==="_ude").length, t:"Biler ude af huset", f:{special:"ude"}},
+    {n:hos, t:"Nøgler hos medarbejdere", f:{special:"hos"}},
+    {n:away, t:"Nøgle på anden lokation end bilen", f:{special:"away"}, warn:away>0},
+    {n:noKey, t:"Bil uden registreret nøgle", f:{special:"nokey"}, warn:noKey>0}
+  ];
+  const mine = active.filter(v=>keysOf(v).some(k=>k.lokation==="_hos" && k.af===S.me.id));
+  return `
+  ${mine.length?`<div class="banner info"><b>Du har ${mine.length} nøgle${mine.length>1?"r":""} på dig:</b> ${mine.map(v=>`<a href="#" data-open="${esc(v.id)}">${esc(v.regnr||vlabel(v))}</a>`).join(", ")}</div>`:""}
+  <div class="grid">${stats.map(s=>`<button class="stat" data-goto='${esc(JSON.stringify(s.f))}'><b style="${s.warn?"color:var(--warn)":""}">${s.n}</b><span class="mut">${s.t}</span></button>`).join("")}</div>
+  <h3>Pr. lokation</h3>
+  <div class="stack">${sortLocs(S.locations).map(l=>{ const b=byLoc[l.id]||{c:0,k:0}; return `
+    <button class="veh" data-goto='${esc(JSON.stringify({lok:l.id}))}'>
+      <div class="row"><span class="t grow">${esc(l.navn)}</span><span class="pill grey">${l.type==="bil"?"Biler":l.type==="noegle"?"Nøgler":"Biler + nøgler"}</span></div>
+      <div class="row small mut" style="margin-top:4px"><span class="loc" style="margin:0">${ICON.car} ${b.c} biler</span><span class="loc" style="margin:0">${ICON.key} ${b.k} nøgler</span></div>
+    </button>`; }).join("")}</div>`;
+}
+
+// ----- liste
+function filtered(){
+  const f=S.f, q=f.q.trim().toUpperCase().replace(/\s+/g,"");
+  return [...S.vehicles.values()].filter(v=>{
+    if(f.status==="aktive" && v.status==="Udleveret") return false;
+    if(f.status && f.status!=="aktive" && f.status!=="alle" && v.status!==f.status) return false;
+    if(f.kat && v.kategori!==f.kat) return false;
+    if(f.lok && v.lokation!==f.lok && !keysOf(v).some(k=>k.lokation===f.lok)) return false;
+    if(f.special==="ude" && v.lokation!=="_ude") return false;
+    if(f.special==="hos" && !keysOf(v).some(k=>k.lokation==="_hos")) return false;
+    if(f.special==="away" && !keyAwayFromCar(v)) return false;
+    if(f.special==="nokey" && keysOf(v).some(k=>k.lokation)) return false;
+    if(q){ const hay=[v.id,v.vin,v.regnr,v.maerke,v.model,v.farve,v.note,v.plads].join(" ").toUpperCase().replace(/\s+/g,""); if(!hay.includes(q)) return false; }
+    return true;
+  }).sort((a,b)=>(b.opdateret||0)-(a.opdateret||0));
+}
+function viewList(){
+  const f=S.f;
+  const sp = {ude:"Biler ude af huset",hos:"Nøgler hos medarbejdere",away:"Nøgle på anden lokation end bilen",nokey:"Uden registreret nøgle"};
+  return `
+  <div class="row" style="margin-bottom:10px">
+    <input type="search" id="q" class="grow" placeholder="Søg stelnr., reg.nr., model…" value="${esc(f.q)}" autocomplete="off">
+    <button class="btn pri" data-act="new">+ Ny</button>
+  </div>
+  ${f.special?`<div class="banner info row"><span class="grow">Filter: ${sp[f.special]}</span><button class="btn" data-act="clearspecial">Fjern</button></div>`:""}
+  <div class="chips">${["aktive",...STATUS,"alle"].map(s=>`<button class="chip ${f.status===s?"on":""}" data-fstatus="${s}">${s==="aktive"?"Aktive":s==="alle"?"Alle":s}</button>`).join("")}</div>
+  <div class="row" style="margin:8px 0 12px">
+    <select id="flok" class="grow"><option value="">Alle lokationer</option>${sortLocs(S.locations).map(l=>`<option value="${esc(l.id)}" ${f.lok===l.id?"selected":""}>${esc(l.navn)}</option>`).join("")}</select>
+    <select id="fkat" style="width:auto"><option value="">Alle typer</option>${Object.entries(KAT).map(([k,t])=>`<option value="${k}" ${f.kat===k?"selected":""}>${t}</option>`).join("")}</select>
+  </div>
+  <div class="small mut" id="count" style="margin-bottom:6px"></div>
+  <div id="list"></div>`;
+}
+function keyWhere(k){ return k.lokation==="_hos" ? `Hos ${esc(empName(k.af, k.afNavn))}` : esc(locName(k.lokation)) + (k.plads?" – "+esc(k.plads):""); }
+function vehRow(v){
+  const keys = keysOf(v);
+  const keyTxt = keys.length ? (keys.length===1 ? keyWhere(keys[0]) : keys.map(k=>`<span class="mut">${keyName(v,k.n,"short")}:</span> ${keyWhere(k)}`).join(" · ")) : "Ingen nøgle registreret";
+  const lastKey = keys.filter(k=>k.ts).sort((a,b)=>b.ts-a.ts)[0];
+  return `<button class="veh" data-open="${esc(v.id)}">
+    <div class="row"><span class="t grow">${esc(vlabel(v))}${v.farve?` <span class="mut" style="font-weight:400">· ${esc(v.farve)}</span>`:""}</span>
+      ${v.kategori&&v.kategori!=="ny"?`<span class="pill grey">${KAT[v.kategori]||""}</span>`:""}<span class="pill ${STATUS_CLS[v.status]||""}">${esc(v.status||"–")}</span></div>
+    <div class="small mut">${v.regnr?esc(v.regnr)+" · ":""}<span class="vin">${esc(v.vin||v.id)}</span></div>
+    <div class="loc">${ICON.car}<span>${esc(locName(v.lokation))}${v.plads?" – "+esc(v.plads):""}${v.gpsTs?' <span class="pill grey">GPS</span>':""}${v.bilTs?`<span class="tiny mut"> · ${whoWhen(v.bilAf,v.bilAfNavn,v.bilTs)}</span>`:""}</span></div>
+    <div class="loc">${ICON.key}<span>${keyTxt}${keyAwayFromCar(v)?' <span class="pill warn">anden lokation</span>':""}${lastKey?`<span class="tiny mut"> · ${whoWhen(lastKey.af,lastKey.afNavn,lastKey.ts)}</span>`:""}</span></div>
+  </button>`;
+}
+function fillList(){
+  const el=$("#list"); if(!el) return;
+  const list = filtered();
+  const c=$("#count"); if(c) c.textContent = list.length+" biler";
+  if(!list.length){ el.innerHTML = `<div class="empty">${S.vehicles.size? "Ingen biler matcher filteret." : "Ingen biler endnu. Tryk + Ny for at oprette den første."}</div>`; return; }
+  el.innerHTML = list.slice(0,300).map(vehRow).join("") + (list.length>300?`<div class="empty">Viser 300 af ${list.length} – brug søgning.</div>`:"");
+}
+
+// ----- indstillinger
+function viewSettings(){
+  const tname = {bil:"Kun biler",noegle:"Kun nøgler",begge:"Biler + nøgler"};
+  let html = `
+  <div class="card">
+    <h2>Min profil</h2>
+    <div class="small mut" style="margin-bottom:10px">Logget ind som <b style="color:var(--ink)">${esc(S.me.navn)}</b>${isAdmin()?" (administrator)":""}. Du logges automatisk ud efter ${AUTO_LOGUD_MIN} minutter uden aktivitet.</div>
+    <div class="row"><button class="btn" data-act="pinchange">Skift PIN-kode</button><button class="btn" data-act="logout">Log ud</button></div>
+  </div>`;
+  if(!isAdmin()) return html + `<div class="card small mut" style="margin-top:12px">Lokationer og medarbejdere administreres af en administrator.</div>`;
+  const emps = S.employees.slice().sort((a,b)=>(b.aktiv-a.aktiv)||a.navn.localeCompare(b.navn,"da"));
+  html += `
+  <div class="card" style="margin-top:12px">
+    <h2>Medarbejdere</h2>
+    <div class="stack">${emps.map(e=>`
+      <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+        <div class="grow"><div style="font-weight:700;${e.aktiv?"":"opacity:.5;text-decoration:line-through"}">${esc(e.navn)}</div><div class="tiny mut">${e.rolle==="admin"?"Administrator":"Medarbejder"}${e.aktiv?"":" · deaktiveret"}</div></div>
+        <button class="btn" data-editemp="${esc(e.id)}">Ret</button>
+      </div>`).join("")}</div>
+    <button class="btn pri block" style="margin-top:14px" data-editemp="">+ Ny medarbejder</button>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <h2>Lokationer</h2>
+    <div class="stack">${sortLocs(S.locations).map(l=>`
+      <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
+        <div class="grow"><div style="font-weight:700">${esc(l.navn)}</div><div class="tiny mut">${tname[l.type]||""}${l.adresse?" · "+esc(l.adresse):""}</div></div>
+        <button class="btn" data-editloc="${esc(l.id)}">Ret</button>
+      </div>`).join("") || '<div class="mut small">Ingen lokationer endnu.</div>'}</div>
+    <button class="btn pri block" style="margin-top:14px" data-editloc="">+ Ny lokation</button>
+  </div>
+  ${S.arkUrl?`<div class="card" style="margin-top:12px"><h2>Data</h2><div class="small mut" style="margin-bottom:10px">Alle data og hele historikken ligger i Google-regnearket.</div><a class="btn" href="${esc(S.arkUrl)}" target="_blank" rel="noopener">Åbn regnearket</a></div>`:""}`;
+  return html;
+}
+function openLocEditor(id){
+  const l = id ? S.locations.find(x=>x.id===id) : {navn:"",type:"begge",adresse:""};
+  if(!l) return;
+  const used = id ? [...S.vehicles.values()].filter(v=>v.lokation===id || keysOf(v).some(k=>k.lokation===id)).length : 0;
+  openSheet(`
+    <div class="hd"><h2>${id?"Ret lokation":"Ny lokation"}</h2><button class="x" data-close>×</button></div>
+    <label class="f">Navn</label><input type="text" id="ln" value="${esc(l.navn)}" placeholder="Fx Nøgleskab salg">
+    <label class="f">Bruges til</label>
+    <div class="seg" id="lt">${[["begge","Biler + nøgler"],["bil","Kun biler"],["noegle","Kun nøgler"]].map(([k,t])=>`<button data-lt="${k}" class="${l.type===k?"on":""}">${t}</button>`).join("")}</div>
+    <label class="f">Adresse / beskrivelse (valgfri)</label><input type="text" id="la" value="${esc(l.adresse||"")}">
+    <button class="btn pri block" style="margin-top:16px" data-act="saveloc" data-id="${esc(id||"")}">Gem</button>
+    ${id?`<div id="delwrap" style="margin-top:10px"><button class="btn dan block" data-act="delloc" data-id="${esc(id)}">Slet lokation</button>${used?`<div class="tiny mut" style="margin-top:6px">${used} biler/nøgler står her. De vises som "Slettet lokation", til de flyttes.</div>`:""}</div>`:""}`);
+}
+function openEmpEditor(id){
+  const e = id ? S.employees.find(x=>x.id===id) : {navn:"", rolle:"bruger", aktiv:true};
+  if(!e) return;
+  openSheet(`
+    <div class="hd"><h2>${id?"Ret medarbejder":"Ny medarbejder"}</h2><button class="x" data-close>×</button></div>
+    <label class="f">Navn</label><input type="text" id="en" value="${esc(e.navn)}" placeholder="Fx Mette Jensen">
+    <label class="f">${id?"Ny PIN-kode (lad stå tom for at beholde)":"PIN-kode (4–8 cifre)"}</label>
+    <input type="text" id="ep" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="${id?"Uændret":"Fx 4821"}">
+    <label class="f">Rolle</label>
+    <div class="seg" id="er"><button data-er="bruger" class="${e.rolle!=="admin"?"on":""}">Medarbejder</button><button data-er="admin" class="${e.rolle==="admin"?"on":""}">Administrator</button></div>
+    <label class="row small" style="margin-top:14px;gap:8px"><input type="checkbox" id="ea" ${e.aktiv?"checked":""} style="width:20px;height:20px"> Aktiv (kan logge ind)</label>
+    <div class="tiny mut" style="margin-top:8px">Deaktivér i stedet for at slette, så historikken bevarer navnet.</div>
+    <button class="btn pri block" style="margin-top:16px" data-act="saveemp" data-id="${esc(id||"")}">Gem</button>`);
+}
+function openPinChange(){
+  openSheet(`
+    <div class="hd"><h2>Skift PIN-kode</h2><button class="x" data-close>×</button></div>
+    <label class="f">Nuværende PIN</label><input type="password" id="p0" inputmode="numeric" maxlength="8" autocomplete="off">
+    <label class="f">Ny PIN (4–8 cifre)</label><input type="password" id="p1" inputmode="numeric" maxlength="8" autocomplete="off">
+    <label class="f">Gentag ny PIN</label><input type="password" id="p2" inputmode="numeric" maxlength="8" autocomplete="off">
+    <button class="btn pri block" style="margin-top:16px" data-act="savepin">Gem ny PIN</button>`);
+}
+
+// ----- etiketter
+function viewLabels(){
+  return `
+  <div class="card stack">
+    <h2 style="margin-bottom:0">Print QR-etiketter</h2>
+    <div class="small mut">Etiketter til biler og nøgler, 75 × 25 mm – én etiket pr. side til labelprinter.</div>
+    <input type="search" id="lq" placeholder="Søg bil…" value="${esc(S.lbl.q)}">
+    <div class="row small"><button class="btn" data-act="lblnew">Vælg biler oprettet i dag</button><button class="btn" data-act="lblclear">Ryd valg</button></div>
+  </div>
+  <table class="lbl" style="margin-top:8px"><thead><tr><td class="mut">Bil</td><td class="mut" style="text-align:center">Bil</td><td class="mut">Nøgler</td></tr></thead><tbody id="lbllist"></tbody></table>
+  <div class="card" style="margin-top:12px">
+    <button class="btn pri block" data-act="preview" id="pdfbtn">Vis og print etiketter</button>
+    <div class="tiny mut" id="lblcount" style="margin-top:6px;text-align:center"></div>
+  </div>`;
+}
+function fillLabels(){
+  const el=$("#lbllist"); if(!el) return;
+  const q = S.lbl.q.trim().toUpperCase().replace(/\s+/g,"");
+  const list = [...S.vehicles.values()].filter(v=>v.status!=="Udleveret").filter(v=>!q || [v.id,v.regnr,v.maerke,v.model].join(" ").toUpperCase().replace(/\s+/g,"").includes(q)).sort((a,b)=>(b.oprettet||0)-(a.oprettet||0)).slice(0,200);
+  el.innerHTML = list.map(v=>{ const s=S.lbl.sel[v.id]||{}; return `<tr>
+    <td><div style="font-weight:700">${esc(vlabel(v))}</div><div class="tiny mut">${v.regnr?esc(v.regnr)+" · ":""}<span class="vin">…${esc((v.vin||v.id).slice(-8))}</span></div></td>
+    <td style="text-align:center"><input type="checkbox" data-lb="${esc(v.id)}" ${s.b?"checked":""}></td>
+    <td>${(keysOf(v).length?keysOf(v).map(k=>k.n):["1"]).map(n=>`<label class="row small" style="gap:6px;flex-wrap:nowrap;margin:2px 0"><input type="checkbox" data-lk="${esc(v.id)}" data-kn="${n}" ${s.k&&s.k[n]?"checked":""}>${esc(keyName(v,n,"short"))}</label>`).join("")}</td></tr>`; }).join("") || `<tr><td colspan="3" class="empty">Ingen biler.</td></tr>`;
+  updLblCount();
+}
+function labelItems(){
+  const items=[];
+  Object.entries(S.lbl.sel).forEach(([id,s])=>{ const v=S.vehicles.get(id); if(!v) return;
+    if(s.b) items.push({v, code:appUrl()+"?b="+encodeURIComponent(id), kind:"BIL", car:true});
+    if(s.k) Object.keys(s.k).filter(n=>s.k[n]).sort().forEach(n=>items.push({v, code:appUrl()+"?b="+encodeURIComponent(id)+"&n="+n, kind:keyName(v,n,"label")}));
+  });
+  return items;
+}
+function updLblCount(){ const n=labelItems().length; const c=$("#lblcount"); if(c) c.textContent = n ? n+" etiketter à 75 × 25 mm" : "Vælg mindst én etiket"; const b=$("#pdfbtn"); if(b) b.disabled=!n; }
+function appUrl(){ return location.origin + location.pathname.replace(/index\.html$/,""); }
+function qrSvg(text){
+  const qr = qrcode(0,"M"); qr.addData(text); qr.make();
+  const n = qr.getModuleCount(); let d="";
+  for(let r=0;r<n;r++) for(let c=0;c<n;c++) if(qr.isDark(r,c)) d+=`M${c} ${r}h1v1h-1z`;
+  return `<svg viewBox="0 0 ${n} ${n}" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg"><path d="${d}" fill="#000"/></svg>`;
+}
+function labelHtml(it){
+  const v=it.v, l2 = v.regnr || vlabel(v), l3 = it.car ? "SCAN MIG EFTER PARKERING" : (v.regnr ? vlabel(v)+(v.farve?", "+v.farve:"") : (v.farve||""));
+  return `<div class="plabel"><div class="pqr">${qrSvg(it.code)}</div><div class="ptxt">
+    <div class="pk">${esc(it.kind)}</div><div class="p2">${esc(l2)}</div><div class="p3">${esc(l3)}</div><div class="pv">${esc(v.vin||v.id)}</div></div></div>`;
+}
+function openPreview(){
+  const items = labelItems(); if(!items.length) return;
+  const html = items.map(labelHtml).join("");
+  $("#printarea").innerHTML = html;
+  openSheet(`<div class="hd"><h2>${items.length} etiketter · 75 × 25 mm</h2><button class="x" data-close>×</button></div>
+    <button class="btn pri block" data-act="print">Print / gem som PDF</button>
+    <div class="tiny mut" style="margin:8px 0 12px">Vælg labelprinteren – eller "Gem som PDF" – i printdialogen. Papirstørrelse 75 × 25 mm, skalering 100 %, ingen margener.</div>
+    <div class="pvwrap">${html}</div>`);
+}
+
+// ---------- sheets ----------
+function openSheet(html){
+  $("#sheetroot").innerHTML = `<div class="sheetwrap" data-closebg><div class="sheet" role="dialog">${html}</div></div>`;
+  S.sheetOpen = true; document.body.style.overflow="hidden";
+}
+function closeSheet(){ gpsStop(); stopCam(); $("#sheetroot").innerHTML=""; S.sheetOpen=false; S.moveState=null; S.createState=null; document.body.style.overflow=""; }
+function locGrid(kind, selected, includeSpecial){
+  const locs = kind==="bil" ? carLocs() : keyLocs();
+  const last = store("lastloc_"+kind);
+  const sorted = locs.slice().sort((a,b)=> (b.id===last)-(a.id===last));
+  let html = sorted.map(l=>`<button class="locbtn ${selected===l.id?"on":""}" data-loc="${esc(l.id)}">${esc(l.navn)}${l.adresse?`<span class="tiny mut">${esc(l.adresse)}</span>`:""}</button>`).join("");
+  if(includeSpecial){
+    const sp = kind==="bil" ? ["_ude","Ude af huset","Prøvetur, værksted, udlånt…"] : ["_hos","Jeg har nøglen","Tager den med"];
+    html += `<button class="locbtn ${selected===sp[0]?"on":""}" data-loc="${sp[0]}">${sp[1]}<span class="tiny mut">${sp[2]}</span></button>`;
+  }
+  if(!locs.length) html = `<div class="small mut">Ingen lokationer endnu – en administrator skal oprette dem.</div>` + html;
+  return `<div class="grid" id="locgrid">${html}</div>`;
+}
+function openMove(id, target){
+  const v = S.vehicles.get(id); if(!v) return;
+  const keys = keysOf(v); const keyNs = keys.length ? keys.map(k=>k.n) : ["1"];
+  const st = {id, target: target || "bil", loc:null};
+  const isCar = st.target==="bil";
+  const cur0 = isCar ? v.lokation : (((v.noegler||{})[st.target.slice(1)])||{}).lokation;
+  const validLocs = (isCar?carLocs():keyLocs()).map(l=>l.id).concat([isCar?"_ude":"_hos"]);
+  if(cur0 && validLocs.includes(cur0) && !(cur0==="_hos")) st.loc = cur0;
+  const cur = isCar ? {lokation:v.lokation, plads:v.plads, af:v.bilAf, afNavn:v.bilAfNavn, ts:v.bilTs} : ((v.noegler||{})[st.target.slice(1)] || {});
+  openSheet(`
+    <div class="hd"><h2>${esc(vlabel(v))}</h2><button class="x" data-close>×</button></div>
+    <div class="small mut" style="margin:-4px 0 10px">${v.regnr?esc(v.regnr)+" · ":""}<span class="vin">${esc(v.vin||v.id)}</span></div>
+    <div class="seg" id="tg">
+      <button data-tg="bil" class="${isCar?"on":""}">Bil</button>
+      ${keyNs.map(n=>`<button data-tg="n${n}" class="${st.target==="n"+n?"on":""}">${esc(keyName(v,n,"short"))}</button>`).join("")}
+    </div>
+    <div class="small mut" style="margin:10px 0">Står nu: <b style="color:var(--ink)">${cur.lokation==="_hos"?"Hos "+esc(empName(cur.af,cur.afNavn)):esc(locName(cur.lokation))}${cur.plads?" – "+esc(cur.plads):""}</b>
+      ${cur.ts?`<br>Sidst flyttet af <b style="color:var(--ink)">${esc(empName(cur.af,cur.afNavn))}</b> · ${ago(cur.ts)}`:""}</div>
+    ${isCar?`<div id="gpsstat" style="margin:-2px 0 6px"></div>${mapLink(v,"Sidste GPS-position")}`:""}
+    <label class="f">Hvor er ${isCar?"bilen":"nøglen"} nu?</label>
+    ${locGrid(isCar?"bil":"noegle", st.loc, true)}
+    <label class="f">${isCar?"Plads / række (valgfri)":"Krog / skuffe / bemærkning (valgfri)"}</label>
+    <input type="text" id="plads" placeholder="${isCar?"Fx Række C, plads 12":"Fx Krog 14"}" value="${st.loc && st.loc===cur.lokation ? esc(cur.plads||"") : ""}">
+    ${v.status!=="Udleveret" ? `<div class="row" style="margin-top:10px"><span class="small mut grow">Status:</span><select id="qstatus" style="width:auto">${STATUS.map(s=>`<option ${v.status===s?"selected":""}>${s}</option>`).join("")}</select></div>`:""}
+    <button class="btn pri block" style="margin-top:14px" data-act="savemove" id="savemove" ${st.loc?"":"disabled"}>${isCar?"Gem placering":"Gem"}</button>
+    <button class="btn block" style="margin-top:10px" data-open="${esc(id)}">Se detaljer og historik</button>`);
+  S.moveState = st;
+  if(isCar) gpsStart(); else gpsStop();
+}
+async function saveMove(){
+  const st=S.moveState; if(!st||!st.loc) return;
+  const v=S.vehicles.get(st.id);
+  const plads=($("#plads")?.value||"").trim();
+  const qs=$("#qstatus"); const status = qs && qs.value!==v.status ? qs.value : "";
+  $("#savemove").disabled=true; $("#savemove").textContent="Gemmer…";
+  const where = st.loc==="_hos" ? "hos dig" : locName(st.loc)+(plads?" – "+plads:"");
+  const gps = st.target==="bil" && GPS.pos ? GPS.pos : null;
+  const ok = await write("flyt", {id:st.id, target:st.target, lokation:st.loc, plads, status, gps}, (st.target==="bil"?"Bil":"Nøgle")+" registreret: "+where);
+  if(ok){ gpsStop(); if(!SPECIAL[st.loc]) store("lastloc_"+(st.target==="bil"?"bil":"noegle"), st.loc); closeSheet(); }
+  else { const b=$("#savemove"); if(b){ b.disabled=false; b.textContent="Gem placering"; } }
+}
+function openCreate(pref){
+  pref = pref || {};
+  const vin = pref.vin || "";
+  const st = {loc:null, kat:"ny", nkeys:1};
+  openSheet(`
+    <div class="hd"><h2>Ny bil</h2><button class="x" data-close>×</button></div>
+    ${pref.note?`<div class="banner info">${esc(pref.note)}</div>`:""}
+    <label class="f">Stelnummer (VIN)</label><input type="text" id="cvin" class="vin" value="${esc(vin)}" placeholder="17 tegn" autocapitalize="characters" maxlength="20">
+    <div class="row">
+      <div class="grow"><label class="f">Reg.nr. (valgfri)</label><input type="text" id="creg" autocapitalize="characters"></div>
+      <div style="width:52%"><label class="f">Type</label><div class="seg" id="ckat">${Object.entries(KAT).map(([k,t])=>`<button data-kat="${k}" class="${st.kat===k?"on":""}">${t}</button>`).join("")}</div></div>
+    </div>
+    <div class="row">
+      <div class="grow"><label class="f">Mærke</label><input type="text" id="cmk" value="${esc(vin?makeFromVin(vin):"")}" list="mklist"></div>
+      <div class="grow"><label class="f">Model</label><input type="text" id="cmd" placeholder="Fx Yaris Cross"></div>
+    </div>
+    <datalist id="mklist">${[...new Set(Object.values(WMI))].sort().map(m=>`<option value="${esc(m)}">`).join("")}</datalist>
+    <div class="row">
+      <div class="grow"><label class="f">Farve (valgfri)</label><input type="text" id="cfa"></div>
+      <div style="width:52%"><label class="f">Nøgletags</label><div class="seg" id="cnk">${[[1,"1 (bundt)"],[2,"2 (+reserve)"]].map(([n,t])=>`<button data-nk="${n}" class="${n===st.nkeys?"on":""}">${t}</button>`).join("")}</div></div>
+    </div>
+    <div id="gpsstat" style="margin-top:12px"></div>
+    <label class="f">Hvor står bilen?</label>
+    ${locGrid("bil", null, false)}
+    <label class="f">Plads / række (valgfri)</label><input type="text" id="cpl" placeholder="Fx Række C, plads 12">
+    <label class="row small" style="margin-top:12px;gap:8px"><input type="checkbox" id="ckeysame" checked style="width:20px;height:20px"> Nøglerne ligger samme sted som bilen</label>
+    <label class="f">Note (valgfri)</label><textarea id="cno" placeholder="Fx byttebil fra kunde, mangler service…"></textarea>
+    <button class="btn pri block" style="margin-top:14px" data-act="savecreate" id="savecreate" disabled>Opret bil</button>`);
+  S.createState = st;
+  gpsStart();
+}
+async function saveCreate(){
+  const st=S.createState;
+  const vin = normVin($("#cvin").value), reg = $("#creg").value.trim().toUpperCase();
+  if(vin.length!==17 && !reg){ toast("Angiv stelnummer (17 tegn) eller reg.nr."); return; }
+  if(!st.loc){ toast("Vælg hvor bilen står"); return; }
+  const id = vin.length===17 ? vin : "REG-"+reg.replace(/[^A-Z0-9]/g,"");
+  if(S.vehicles.has(id)){ toast("Bilen findes allerede"); openMove(id,"bil"); return; }
+  const keySame = $("#ckeysame").checked;
+  const btn=$("#savecreate"); btn.disabled=true; btn.textContent="Opretter…";
+  const ok = await write("opretBil", {vin, regnr:reg, maerke:$("#cmk").value, model:$("#cmd").value, farve:$("#cfa").value, kategori:st.kat,
+    lokation:st.loc, plads:$("#cpl").value, antalNoegler:st.nkeys, noeglerSammeSted:keySame, note:$("#cno").value, gps:GPS.pos}, "Bil oprettet – etiketter klar under Etiketter");
+  if(ok){
+    const k={}; for(let i=1;i<=st.nkeys;i++) k[String(i)]=true;
+    S.lbl.sel[id]={b:true,k}; store("lastloc_bil", st.loc); closeSheet();
+    if(!keySame) setTimeout(()=>openMove(id,"n1"),200);
+  } else { btn.disabled=false; btn.textContent="Opret bil"; }
+}
+function openDetail(id){
+  const v = S.vehicles.get(id); if(!v){ closeSheet(); return; }
+  const keys = keysOf(v);
+  openSheet(`
+    <div class="hd"><h2>${esc(vlabel(v))}</h2><button class="x" data-close>×</button></div>
+    <div class="row" style="margin:-2px 0 12px"><span class="pill ${STATUS_CLS[v.status]||""}">${esc(v.status)}</span><span class="pill grey">${KAT[v.kategori]||"Ny"}</span><span class="small mut vin">${esc(v.vin||v.id)}</span></div>
+    <div class="card stack">
+      <div class="row"><div class="grow"><div class="loc" style="margin:0">${ICON.car}<span><b>${esc(locName(v.lokation))}${v.plads?" – "+esc(v.plads):""}</b>${v.bilTs?`<br><span class="tiny mut">Sidst flyttet af ${whoWhen(v.bilAf,v.bilAfNavn,v.bilTs)}</span>`:""}</span></div></div><button class="btn" data-move="${esc(id)}" data-target="bil">Flyt</button></div>
+      ${v.gpsTs?`<div class="row">${mapLink(v)}<span class="tiny mut">GPS ±${esc(v.gpsNoejagtighed)} m · ${esc(v.gpsAfNavn||"")} · ${ago(v.gpsTs)}</span></div>`:""}
+      ${(keys.length?keys:[{n:"1"}]).map(k=>`<div class="row"><div class="grow"><div class="loc" style="margin:0">${ICON.key}<span>${esc(keyName(v,k.n))}: <b>${keyWhere(k)}</b>${k.ts?`<br><span class="tiny mut">Sidst håndteret af ${whoWhen(k.af,k.afNavn,k.ts)}</span>`:""}</span></div></div><button class="btn" data-move="${esc(id)}" data-target="n${k.n}">Flyt</button></div>`).join("")}
+      <div class="row">${keys.length<2?`<button class="btn small" data-act="addkey" data-id="${esc(id)}">+ Tilføj reservenøgle</button>`:`<button class="btn small" data-act="rmkey" data-id="${esc(id)}">− Fjern reservenøgle</button>`}</div>
+    </div>
+    <h3>Historik</h3>
+    <div class="hist" id="hist"><div class="spin"></div></div>
+    <h3>Oplysninger</h3>
+    <div class="card">
+      <div class="row"><div class="grow"><label class="f" style="margin-top:0">Reg.nr.</label><input type="text" id="dreg" value="${esc(v.regnr)}" autocapitalize="characters"></div>
+      <div class="grow"><label class="f" style="margin-top:0">Status</label><select id="dst">${STATUS.map(s=>`<option ${v.status===s?"selected":""}>${s}</option>`).join("")}</select></div></div>
+      <div class="row"><div class="grow"><label class="f">Mærke</label><input type="text" id="dmk" value="${esc(v.maerke)}"></div><div class="grow"><label class="f">Model</label><input type="text" id="dmd" value="${esc(v.model)}"></div></div>
+      <div class="row"><div class="grow"><label class="f">Farve</label><input type="text" id="dfa" value="${esc(v.farve)}"></div>
+      <div class="grow"><label class="f">Type</label><select id="dkat">${Object.entries(KAT).map(([k,t])=>`<option value="${k}" ${v.kategori===k?"selected":""}>${t}</option>`).join("")}</select></div></div>
+      <label class="f">Note</label><textarea id="dno">${esc(v.note)}</textarea>
+      <button class="btn pri block" style="margin-top:12px" data-act="savedetail" data-id="${esc(id)}">Gem ændringer</button>
+    </div>
+    <div class="row" style="margin-top:18px">
+      <button class="btn grow" data-act="lbladd" data-id="${esc(id)}">Tilføj til etiketter</button>
+      ${isAdmin()?`<span id="delwrap"><button class="btn dan" data-act="delveh" data-id="${esc(id)}">Slet bil</button></span>`:""}
+    </div>`);
+  api("historik",{id}).then(r=>{
+    const el=$("#hist"); if(!el) return;
+    el.innerHTML = (r.liste||[]).map(h=>`<div><b>${esc(h.tekst)}</b><div class="tiny mut">${fmtTime(h.ts)} · ${esc(h.af)}</div></div>`).join("") || '<div class="mut">Ingen historik</div>';
+  }).catch(()=>{ const el=$("#hist"); if(el) el.innerHTML='<div class="mut">Kunne ikke hente historik</div>'; });
+}
+
+// ---------- scanning ----------
+let zxReader=null, ZX=null, zxHints;
+async function getBitmapCanvas(file, maxSide, rotate){
+  let src;
+  try{ src = await createImageBitmap(file, {imageOrientation:"from-image"}); }
+  catch(e){ src = await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=URL.createObjectURL(file); }); }
+  const w0=src.width, h0=src.height, sc=Math.min(1, maxSide/Math.max(w0,h0)), w=Math.round(w0*sc), h=Math.round(h0*sc);
+  const c=document.createElement("canvas"); if(rotate){ c.width=h; c.height=w; } else { c.width=w; c.height=h; }
+  const ctx=c.getContext("2d",{willReadFrequently:true});
+  if(rotate){ ctx.translate(h,0); ctx.rotate(Math.PI/2); }
+  ctx.drawImage(src,0,0,w,h);
+  return {c, ctx, src};
+}
+function zxDecode(ctx, x, y, w, h){
+  const d = ctx.getImageData(x,y,w,h).data, lum = new Uint8ClampedArray(w*h);
+  for(let i=0,j=0;i<lum.length;i++,j+=4) lum[i] = (d[j]*306 + d[j+1]*601 + d[j+2]*117) >> 10;
+  const out=[];
+  for(const Bin of [ZX.HybridBinarizer, ZX.GlobalHistogramBinarizer]){
+    try{ const r = zxReader.decode(new ZX.BinaryBitmap(new Bin(new ZX.RGBLuminanceSource(lum,w,h))), zxHints); if(r) out.push(r.getText()); }catch(e){}
+    zxReader.reset(); if(out.length) break;
+  }
+  return out;
+}
+async function decodeImage(file){
+  const found = new Set(); const good = () => [...found].some(t=>parseCode(t));
+  if("BarcodeDetector" in window){
+    try{ const det = new window.BarcodeDetector({formats:["qr_code","code_128","code_39","data_matrix"]}); const {src}=await getBitmapCanvas(file,2400,false);
+      (await det.detect(src)).forEach(r=>found.add(r.rawValue)); if(good()) return [...found]; }catch(e){}
+  }
+  await loadScript("https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js");
+  ZX = window.ZXing;
+  if(!zxReader){
+    zxReader = new ZX.MultiFormatReader(); zxHints = new Map();
+    zxHints.set(ZX.DecodeHintType.TRY_HARDER, true);
+    zxHints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, [ZX.BarcodeFormat.QR_CODE, ZX.BarcodeFormat.CODE_39, ZX.BarcodeFormat.CODE_128, ZX.BarcodeFormat.DATA_MATRIX]);
+    zxReader.setHints(zxHints);
+  }
+  for(const rotate of [false,true]) for(const max of [1400, 2200, 900]){
+    const {c, ctx} = await getBitmapCanvas(file, max, rotate);
+    zxDecode(ctx,0,0,c.width,c.height).forEach(t=>found.add(t)); if(good()) return [...found];
+    for(const n of [3,5]){ const bh=Math.round(c.height/n*1.8), step=Math.round(c.height/n);
+      for(let y=0;y<c.height;y+=step){ const hh=Math.min(bh,c.height-y); if(hh<40) break; zxDecode(ctx,0,y,c.width,hh).forEach(t=>found.add(t)); if(good()) return [...found]; } }
+    await new Promise(r=>setTimeout(r,0));
+  }
+  return [...found];
+}
+async function handleScanFile(file){
+  if(!file) return;
+  openSheet(`<div class="hd"><h2>Læser QR-kode…</h2><button class="x" data-close>×</button></div><div class="spin"></div>`);
+  let texts=[]; try{ texts = await decodeImage(file); }catch(e){}
+  const parsed = texts.map(parseCode).filter(Boolean);
+  if(!parsed.length){
+    openSheet(`<div class="hd"><h2>Ingen QR-kode fundet</h2><button class="x" data-close>×</button></div>
+      <p class="small">Prøv igen tættere på QR-koden og uden genskin.</p>
+      <button class="btn pri block" data-act="cam">Prøv igen</button>
+      <h3>Eller skriv det</h3>
+      <div class="row"><input type="text" id="manual" class="grow vin" placeholder="Stelnr., sidste cifre eller reg.nr." autocapitalize="characters"><button class="btn" data-act="manual">Find</button></div>`);
+    return;
+  }
+  goToCode(parsed[0]);
+}
+function goToCode(p){
+  if(S.vehicles.has(p.id)){ openMove(p.id, p.target); return; }
+  if(/^[A-HJ-NPR-Z0-9]{17}$/.test(p.id)) { openCreate({vin:p.id, note:"Stelnummeret er ikke registreret endnu – opret bilen."}); return; }
+  closeSheet(); toast("Ukendt etiket – bilen er måske slettet");
+}
+function manualLookup(q){
+  q = q.trim().toUpperCase().replace(/\s+/g,""); if(!q) return;
+  const vin = findVin(q); if(vin){ goToCode({id:vin,target:"bil"}); return; }
+  const hits=[...S.vehicles.values()].filter(v=>(v.id+" "+(v.regnr||"")).toUpperCase().replace(/\s+/g,"").includes(q));
+  if(hits.length===1){ openMove(hits[0].id,"bil"); return; }
+  closeSheet(); S.tab="biler"; S.f={...S.f,q,special:"",lok:"",status:"alle"}; render();
+}
+function openScanSheet(){
+  openSheet(`<div class="hd"><h2>Scan</h2><button class="x" data-close>×</button></div>
+    <div id="camwrap" class="camwrap"><video id="video" playsinline muted></video><div class="camframe"></div></div>
+    <div id="camstat" class="small mut" style="text-align:center;margin:8px 0">Starter kamera…</div>
+    <button class="btn block" data-act="cam">Tag et billede i stedet</button>
+    <h3>Eller skriv det</h3>
+    <div class="row"><input type="text" id="manual" class="grow vin" placeholder="Stelnr., sidste cifre eller reg.nr." autocapitalize="characters"><button class="btn" data-act="manual">Find</button></div>
+    <button class="btn block" style="margin-top:14px" data-act="new">+ Opret bil</button>`);
+  startCam();
+}
+// Live-scanning med kameraet (kræver https – virker på GitHub Pages)
+const CAM = {stream:null, timer:null, det:null};
+async function startCam(){
+  const st=$("#camstat"), vid=$("#video");
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ if(st) st.textContent="Kameraet kan ikke åbnes her – tag et billede i stedet."; $("#camwrap")?.classList.add("hidden"); return; }
+  try{ CAM.stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment", width:{ideal:1280}}, audio:false}); }
+  catch(e){ if(st) st.textContent="Ingen adgang til kameraet – tag et billede i stedet."; $("#camwrap")?.classList.add("hidden"); return; }
+  if(!$("#video")){ stopCam(); return; }
+  vid.srcObject = CAM.stream; await vid.play().catch(()=>{});
+  if(st) st.textContent="Hold QR-koden inden for rammen";
+  if("BarcodeDetector" in window){ try{ CAM.det = new window.BarcodeDetector({formats:["qr_code"]}); }catch(e){ CAM.det=null; } }
+  if(!CAM.det){ try{ await loadScript("https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"); }catch(e){} }
+  const c=document.createElement("canvas"), ctx=c.getContext("2d",{willReadFrequently:true});
+  const tick = async ()=>{
+    if(!CAM.stream || !$("#video")) return;
+    if(vid.videoWidth){
+      let texts=[];
+      try{
+        if(CAM.det) texts=(await CAM.det.detect(vid)).map(r=>r.rawValue);
+        else if(window.ZXing){
+          const w=Math.min(800,vid.videoWidth), h=Math.round(vid.videoHeight*w/vid.videoWidth); c.width=w; c.height=h; ctx.drawImage(vid,0,0,w,h);
+          if(!zxReader){ ZX=window.ZXing; zxReader=new ZX.MultiFormatReader(); zxHints=new Map(); zxHints.set(ZX.DecodeHintType.POSSIBLE_FORMATS,[ZX.BarcodeFormat.QR_CODE]); zxHints.set(ZX.DecodeHintType.TRY_HARDER,true); zxReader.setHints(zxHints); }
+          ZX=window.ZXing; texts=zxDecode(ctx,0,0,w,h);
+        }
+      }catch(e){}
+      const p = texts.map(parseCode).find(Boolean);
+      if(p){ if(navigator.vibrate) navigator.vibrate(60); stopCam(); goToCode(p); return; }
+    }
+    CAM.timer=setTimeout(tick, 250);
+  };
+  tick();
+}
+function stopCam(){ clearTimeout(CAM.timer); if(CAM.stream){ CAM.stream.getTracks().forEach(t=>t.stop()); CAM.stream=null; } }
+
+// ---------- events ----------
+document.addEventListener("click", async ev=>{
+  const a0 = ev.target.closest("a[data-open]"); if(a0){ ev.preventDefault(); openDetail(a0.dataset.open); return; }
+  const t = ev.target.closest("button,[data-closebg],input[type=checkbox]");
+  if(!t) return;
+  if(t.hasAttribute("data-closebg")){ if(ev.target===t) closeSheet(); return; }
+  if(t.matches("input[type=checkbox]")){
+    if(t.dataset.lb || t.dataset.lk){ const id=t.dataset.lb||t.dataset.lk; const s=S.lbl.sel[id]||(S.lbl.sel[id]={}); if(t.dataset.lb) s.b=t.checked; else { s.k=s.k||{}; s.k[t.dataset.kn]=t.checked; } updLblCount(); }
+    return;
+  }
+  const d = t.dataset;
+  if(t.hasAttribute("data-close")){ closeSheet(); return; }
+  if(d.loginid){ S.login.valgt=d.loginid; drawLogin(); return; }
+  if(d.key!==undefined){ const p=$("#pin"); if(d.key==="C") p.value=""; else if(d.key==="OK") doLogin(); else if(p.value.length<8) p.value+=d.key; return; }
+  if(d.tab){ if(d.tab==="scan"){ openScanSheet(); return; } closeSheet(); S.tab=d.tab; window.scrollTo(0,0); render(); return; }
+  if(d.goto){ S.f={q:"",lok:"",status:"aktive",kat:"",special:"",...JSON.parse(d.goto)}; S.tab="biler"; render(); return; }
+  if(d.open){ openDetail(d.open); return; }
+  if(d.move){ openMove(d.move, d.target); return; }
+  if(d.fstatus){ S.f.status=d.fstatus; document.querySelectorAll("[data-fstatus]").forEach(b=>b.classList.toggle("on",b.dataset.fstatus===d.fstatus)); fillList(); return; }
+  if(d.loc!==undefined && t.closest("#locgrid")){
+    document.querySelectorAll("#locgrid .locbtn").forEach(b=>b.classList.toggle("on", b===t));
+    if(S.moveState && $("#savemove")){ S.moveState.loc=d.loc; $("#savemove").disabled=false; }
+    if(S.createState && $("#savecreate")){ S.createState.loc=d.loc; $("#savecreate").disabled=false; }
+    return;
+  }
+  if(d.tg){ openMove(S.moveState.id, d.tg); return; }
+  if(d.kat){ S.createState.kat=d.kat; t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t));
+    S.createState.nkeys = d.kat==="demo"?2:1; document.querySelectorAll("#cnk button").forEach(b=>b.classList.toggle("on", +b.dataset.nk===S.createState.nkeys)); return; }
+  if(d.nk){ S.createState.nkeys=+d.nk; t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t)); return; }
+  if(d.lt || d.er){ t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t)); return; }
+  if(d.editloc!==undefined){ openLocEditor(d.editloc); return; }
+  if(d.editemp!==undefined){ openEmpEditor(d.editemp); return; }
+  const a = d.act; if(!a) return;
+  if(a==="retrylogin"||a==="loginback"){ S.login.valgt=null; a==="retrylogin"?showLogin():drawLogin(); }
+  else if(a==="logout"){ logout(false); }
+  else if(a==="cam"){ $("#cam").click(); }
+  else if(a==="pick"){ $("#pick").click(); }
+  else if(a==="manual"){ manualLookup($("#manual").value); }
+  else if(a==="new"){ openCreate({}); }
+  else if(a==="clearspecial"){ S.f.special=""; render(); }
+  else if(a==="savemove"){ saveMove(); }
+  else if(a==="savecreate"){ saveCreate(); }
+  else if(a==="saveloc"){
+    const type=($("#lt .on")||{dataset:{}}).dataset.lt||"begge"; t.disabled=true;
+    if(await write("gemLokation",{id:d.id||"", navn:$("#ln").value, type, adresse:$("#la").value},"Lokation gemt")) closeSheet(); else t.disabled=false;
+  }
+  else if(a==="delloc"){ $("#delwrap").innerHTML = `<div class="row"><span class="small grow">Slet lokationen?</span><button class="btn" data-close>Nej</button><button class="btn dan" data-act="delloc2" data-id="${esc(d.id)}">Ja, slet</button></div>`; }
+  else if(a==="delloc2"){ if(await write("sletLokation",{id:d.id},"Lokation slettet")) closeSheet(); }
+  else if(a==="saveemp"){
+    const rolle=($("#er .on")||{dataset:{}}).dataset.er||"bruger"; t.disabled=true;
+    if(await write("gemMedarbejder",{id:d.id||"", navn:$("#en").value, pin:$("#ep").value.trim(), rolle, aktiv:$("#ea").checked},"Medarbejder gemt")) closeSheet(); else t.disabled=false;
+  }
+  else if(a==="pinchange"){ openPinChange(); }
+  else if(a==="savepin"){
+    if($("#p1").value!==$("#p2").value){ toast("De to nye PIN-koder er ikke ens"); return; }
+    t.disabled=true; if(await write("skiftPin",{gammel:$("#p0").value, ny:$("#p1").value},"PIN-kode skiftet")) closeSheet(); else t.disabled=false;
+  }
+  else if(a==="savedetail"){
+    t.disabled=true;
+    const felter={regnr:$("#dreg").value, status:$("#dst").value, maerke:$("#dmk").value, model:$("#dmd").value, farve:$("#dfa").value, kategori:$("#dkat").value, note:$("#dno").value};
+    if(await write("retBil",{id:d.id, felter},"Gemt")) closeSheet(); else t.disabled=false;
+  }
+  else if(a==="addkey"){ t.disabled=true; if(await write("tilfoejNoegle",{id:d.id})){ const v=S.vehicles.get(d.id); const ns=keysOf(v).map(k=>k.n); openMove(d.id,"n"+ns[ns.length-1]); } }
+  else if(a==="rmkey"){ t.disabled=true; if(await write("fjernNoegle",{id:d.id},"Reservenøgle fjernet")) openDetail(d.id); }
+  else if(a==="delveh"){ $("#delwrap").innerHTML = `<button class="btn" data-open="${esc(d.id)}">Fortryd</button> <button class="btn dan" data-act="delveh2" data-id="${esc(d.id)}">Slet helt</button>`; }
+  else if(a==="delveh2"){ if(await write("sletBil",{id:d.id},"Bil slettet")) closeSheet(); }
+  else if(a==="lbladd"){ S.lbl.sel[d.id]={b:true,k:allKeysSel(S.vehicles.get(d.id))}; closeSheet(); S.tab="etiketter"; render(); toast("Tilføjet til etiketter"); }
+  else if(a==="lblnew"){ const day=new Date(); day.setHours(0,0,0,0); S.vehicles.forEach(v=>{ if((v.oprettet||0)>=day.getTime()) S.lbl.sel[v.id]={b:true,k:allKeysSel(v)}; }); fillLabels(); }
+  else if(a==="lblclear"){ S.lbl.sel={}; fillLabels(); }
+  else if(a==="preview"){ openPreview(); }
+  else if(a==="print"){ window.print(); }
+});
+document.addEventListener("input", ev=>{
+  const t=ev.target;
+  if(t.id==="q"){ S.f.q=t.value; fillList(); }
+  else if(t.id==="lq"){ S.lbl.q=t.value; fillLabels(); }
+  else if(t.id==="cvin"){ const v=normVin(t.value), mk=$("#cmk"); if(v.length===17 && mk && !mk.value) mk.value=makeFromVin(v); }
+});
+document.addEventListener("change", ev=>{
+  const t=ev.target;
+  if(t.id==="flok"){ S.f.lok=t.value; fillList(); }
+  else if(t.id==="fkat"){ S.f.kat=t.value; fillList(); }
+  else if(t.id==="cam" || t.id==="pick"){ const f=t.files && t.files[0]; t.value=""; handleScanFile(f); }
+});
+document.addEventListener("keydown", ev=>{
+  if(ev.key==="Enter" && ev.target.id==="manual") manualLookup(ev.target.value);
+  if(ev.key==="Enter" && ev.target.id==="pin") doLogin();
+  if(ev.key==="Escape" && S.sheetOpen) closeSheet();
+});
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && S.token) reload(); });
+
+// ---------- start ----------
+(async function start(){
+  const q = new URLSearchParams(location.search);
+  if(q.get("b")){ S.pending = {id:q.get("b").toUpperCase(), target: q.get("n") ? "n"+q.get("n") : "bil"}; history.replaceState(null,"",location.pathname); }
+  const t = sess();
+  if(t){ S.token=t; await afterLogin(); return; }
+  showLogin();
+})();
+
+})();
+</script>
+</body>
+</html>
