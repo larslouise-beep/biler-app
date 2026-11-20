@@ -11,12 +11,12 @@
 
 const FOERSTE_ADMIN = { navn: '', pin: '' }; // udfyldes kun lokalt første gang opsaetning() køres – læg aldrig PIN i git
 const SESSION_TIMER = 6;          // så længe et login højst gælder (max 6 timer)
-const MAKS_FORKERTE_PIN = 5;
-const RADIUS_STD = 75;            // standard-radius (m) for en lokations GPS-område      // derefter låses medarbejderen i 15 minutter
+const MAKS_FORKERTE_PIN = 5;      // derefter låses medarbejderen i 15 minutter
+const RADIUS_STD = 75;            // standard-radius (m) for en lokations GPS-område (cirkel)
 
 const ARK = {
   medarbejdere: ['id', 'navn', 'rolle', 'aktiv', 'pinHash', 'salt', 'oprettet'],
-  lokationer:   ['id', 'navn', 'type', 'adresse', 'oprettet', 'lat', 'lng', 'radius'],
+  lokationer:   ['id', 'navn', 'type', 'adresse', 'oprettet', 'lat', 'lng', 'radius', 'omraade'],
   biler:        ['id', 'vin', 'regnr', 'maerke', 'model', 'farve', 'kategori', 'status',
                  'lokation', 'lokationNavn', 'plads', 'bilTs', 'bilAf', 'bilAfNavn',
                  'noegler', 'noeglerTekst', 'note', 'oprettet', 'opdateret', 'opdateretAf', 'opdateretAfNavn',
@@ -149,7 +149,7 @@ function me_(token) {
 // ---------------------------------------------------------------- data
 function data_(me) {
   const lok = rows_('lokationer').map(function (l) { return { id: l.id, navn: String(l.navn), type: l.type || 'begge', adresse: String(l.adresse || ''),
-    lat: num_(l.lat), lng: num_(l.lng), radius: num_(l.radius) }; });
+    lat: num_(l.lat), lng: num_(l.lng), radius: num_(l.radius), omraade: polygon_(l.omraade) }; });
   const biler = rows_('biler').map(function (v) {
     const o = {};
     ARK.biler.forEach(function (c) { o[c] = v[c]; });
@@ -250,14 +250,41 @@ function afstand_(lat1, lng1, lat2, lng2) {
   const r = Math.PI / 180, a = Math.sin((lat2 - lat1) * r / 2), b = Math.sin((lng2 - lng1) * r / 2);
   return 2 * 6371000 * Math.asin(Math.sqrt(a * a + Math.cos(lat1 * r) * Math.cos(lat2 * r) * b * b));
 }
-// Tekst til historikken, hvis bilens GPS ligger uden for den valgte lokations radius
+// Område-polygon gemt som JSON [[lat,lng],...] (3–30 hjørner) – ellers null
+function polygon_(s) {
+  try {
+    const a = typeof s === 'string' ? JSON.parse(s || 'null') : s;
+    if (!Array.isArray(a) || a.length < 3 || a.length > 30) return null;
+    const ud = a.map(function (h) { return [Number(h && h[0]), Number(h && h[1])]; });
+    return ud.every(function (h) { return isFinite(h[0]) && isFinite(h[1]) && Math.abs(h[0]) <= 90 && Math.abs(h[1]) <= 180 && !(h[0] === 0 && h[1] === 0); })
+      ? ud.map(function (h) { return [Math.round(h[0] * 1e6) / 1e6, Math.round(h[1] * 1e6) / 1e6]; }) : null;
+  } catch (e) { return null; }
+}
+// Hvor langt (m) et punkt ligger UDEN FOR polygonen (0 = indenfor). Lokal flad projektion – fint på pladsstørrelse.
+function udenforPolygon_(poly, lat, lng) {
+  const k = Math.PI / 180 * 6371000, c = Math.cos(lat * Math.PI / 180);
+  const p = poly.map(function (h) { return [(h[1] - lng) * k * c, (h[0] - lat) * k]; });
+  let inde = false, min = Infinity;
+  for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+    const a = p[i], b = p[j];
+    if ((a[1] > 0) !== (b[1] > 0) && 0 < (b[0] - a[0]) * (0 - a[1]) / (b[1] - a[1]) + a[0]) inde = !inde;
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+    const t = L ? Math.max(0, Math.min(1, -(a[0] * dx + a[1] * dy) / L)) : 0;
+    min = Math.min(min, Math.hypot(a[0] + t * dx, a[1] + t * dy));
+  }
+  return inde ? 0 : min;
+}
+// Tekst til historikken, hvis bilens GPS ligger tydeligt uden for den valgte lokations område
 function gpsAfvigelse_(lokId, v) {
   if (!lokId || SPECIAL[lokId]) return '';
   const l = rows_('lokationer').filter(function (x) { return x.id === lokId; })[0];
-  if (!l || num_(l.lat) === null || num_(l.lng) === null) return '';
-  const d = Math.round(afstand_(num_(l.lat), num_(l.lng), v.gpsLat, v.gpsLng));
-  const radius = num_(l.radius) || RADIUS_STD;
-  return d - (Number(v.gpsNoejagtighed) || 0) > radius ? ' ⚠ GPS ' + d + ' m fra ' + String(l.navn) : '';
+  if (!l) return '';
+  const acc = Number(v.gpsNoejagtighed) || 0, poly = polygon_(l.omraade);
+  let ude;
+  if (poly) ude = udenforPolygon_(poly, v.gpsLat, v.gpsLng);
+  else if (num_(l.lat) !== null && num_(l.lng) !== null) ude = afstand_(num_(l.lat), num_(l.lng), v.gpsLat, v.gpsLng) - (num_(l.radius) || RADIUS_STD);
+  else return '';
+  return ude - acc > 0 ? ' ⚠ GPS ' + Math.round(ude) + ' m uden for ' + String(l.navn) : '';
 }
 function saetGps_(v, me, g) {
   if (!g) return false;
@@ -305,6 +332,12 @@ function gemLokation_(p) {
   let l = p.id ? rows_('lokationer').filter(function (x) { return x.id === p.id; })[0] : null;
   if (!l) l = { id: Utilities.getUuid().slice(0, 8), oprettet: new Date() };
   l.navn = navn; l.type = type; l.adresse = str_(p.adresse);
+  if (p.rydOmraade) l.omraade = '';
+  else if (p.omraade !== undefined && p.omraade !== null && p.omraade !== '') {
+    const poly = polygon_(p.omraade);
+    if (!poly) throw fejl_('DATA', 'Området skal have mindst 3 gyldige hjørner.');
+    l.omraade = JSON.stringify(poly);
+  }
   if (p.rydPos) { l.lat = ''; l.lng = ''; l.radius = ''; }
   else {
     if (p.lat !== undefined && p.lat !== null && p.lat !== '') {

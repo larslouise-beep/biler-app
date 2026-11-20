@@ -367,12 +367,37 @@ const RADIUS_STD = 75; // m – skal matche RADIUS_STD i Code.gs
 function hasPos(l){ return !!l && l.lat!=null && l.lng!=null && l.lat!=="" && l.lng!==""; }
 function distM(a,b,c,d){ const r=Math.PI/180, x=Math.sin((c-a)*r/2), y=Math.sin((d-b)*r/2); return 2*6371000*Math.asin(Math.sqrt(x*x+Math.cos(a*r)*Math.cos(c*r)*y*y)); }
 function locDist(l,pos){ return hasPos(l)&&pos ? distM(+l.lat,+l.lng,pos.lat,pos.lng) : null; }
-// Nærmeste bil-lokation, som GPS-positionen ligger inden for (radius + usikkerhed)
+function hasPoly(l){ return !!l && Array.isArray(l.omraade) && l.omraade.length>=3; }
+function hasArea(l){ return hasPoly(l) || hasPos(l); }
+// Hjørner [[lat,lng],...] → flade meter-koordinater omkring (lat0,lng0)
+function proj(poly,lat0,lng0){ const k=Math.PI/180*6371000, c=Math.cos(lat0*Math.PI/180); return poly.map(h=>[(h[1]-lng0)*k*c,(h[0]-lat0)*k]); }
+function polyArea(pts){ let a=0; for(let i=0,j=pts.length-1;i<pts.length;j=i++) a+=(pts[j][0]+pts[i][0])*(pts[j][1]-pts[i][1]); return Math.abs(a/2); }
+// Hvor langt (m) pos ligger UDEN FOR polygonen (0 = indenfor)
+function polyOutside(poly,pos){
+  const q=proj(poly,pos.lat,pos.lng); let inside=false, min=Infinity;
+  for(let i=0,j=q.length-1;i<q.length;j=i++){
+    const a=q[i], b=q[j];
+    if((a[1]>0)!==(b[1]>0) && 0 < (b[0]-a[0])*(0-a[1])/(b[1]-a[1])+a[0]) inside=!inside;
+    const dx=b[0]-a[0], dy=b[1]-a[1], L=dx*dx+dy*dy, t=L?Math.max(0,Math.min(1,-(a[0]*dx+a[1]*dy)/L)):0;
+    min=Math.min(min, Math.hypot(a[0]+t*dx, a[1]+t*dy));
+  }
+  return inside ? 0 : min;
+}
+// Lokationens område i forhold til pos: ude = meter uden for (0 = indenfor), areal i m²
+function zone(l,pos){
+  if(!pos) return null;
+  if(hasPoly(l)) return {ude:polyOutside(l.omraade,pos), areal:polyArea(proj(l.omraade,pos.lat,pos.lng))};
+  if(hasPos(l)){ const r=+l.radius||RADIUS_STD; return {ude:Math.max(0,locDist(l,pos)-r), areal:Math.PI*r*r}; }
+  return null;
+}
+// Bil-lokation for GPS-positionen: står man inde i flere områder, vinder det mindste (fx showroom inde i udearealet).
+// Ellers den nærmeste, der kan nås inden for GPS-usikkerheden.
 function gpsLoc(pos){
-  if(!pos) return null; let best=null;
-  carLocs().forEach(l=>{ const d=locDist(l,pos); if(d===null) return; const r=+l.radius||RADIUS_STD;
-    if(d-pos.acc<=r && (!best || d/r < best.d/best.r)) best={l,d,r}; });
-  return best;
+  if(!pos) return null; let inde=null, naer=null;
+  carLocs().forEach(l=>{ const z=zone(l,pos); if(!z) return;
+    if(z.ude===0){ if(!inde || z.areal<inde.areal) inde={l,...z}; }
+    else if(z.ude-pos.acc<=0 && (!naer || z.ude<naer.ude)) naer={l,...z}; });
+  return inde||naer;
 }
 function curPick(){ const st=S.moveState && S.moveState.target==="bil" ? S.moveState : S.createState; return st||null; }
 function selectLoc(id){
@@ -385,6 +410,9 @@ function gpsHook(){
     S.locEdit.pos=GPS.pos; const i=$("#locposinfo");
     if(i) i.textContent = `Ny position klar (±${GPS.pos.acc} m) – gemmes når du trykker Gem.`;
   }
+  if(S.locEdit && S.locEdit.wantCorner && GPS.pos && !GPS.busy){
+    S.locEdit.wantCorner=false; S.locEdit.poly.push([GPS.pos.lat, GPS.pos.lng]); S.locEdit.polyChanged=true; polyShow();
+  }
   const st=curPick(); if(!st) return;
   const m=gpsLoc(GPS.pos);
   if(m && !st.manual && st.loc!==m.l.id){ selectLoc(m.l.id); st.auto=m.l.id; st.warnAck=false; }
@@ -395,17 +423,16 @@ function locCheck(){
   const st=curPick(), el=$("#locwarn"); if(!st||!el) return;
   st.mismatch=false; let html="";
   const l = st.loc && !SPECIAL[st.loc] ? S.locations.find(x=>x.id===st.loc) : null;
-  const d = l ? locDist(l,GPS.pos) : null;
-  if(d!==null){
-    const r=+l.radius||RADIUS_STD;
-    if(d-GPS.pos.acc > r){
+  const z = l ? zone(l,GPS.pos) : null;
+  if(z){
+    if(z.ude-GPS.pos.acc > 0){
       st.mismatch=true; const m=gpsLoc(GPS.pos);
-      html=`<div class="banner warn" style="margin:8px 0 0">GPS viser, at bilen står ca. ${fmtDist(d)} fra <b>${esc(l.navn)}</b>.${m?` Den passer med <b>${esc(m.l.navn)}</b>. <button class="btn small" data-act="useloc" data-id="${esc(m.l.id)}">Vælg ${esc(m.l.navn)}</button>`:" Tjek at du har valgt den rigtige lokation."}</div>`;
+      html=`<div class="banner warn" style="margin:8px 0 0">GPS viser, at bilen står ca. ${fmtDist(z.ude)} uden for <b>${esc(l.navn)}</b>.${m?` Den passer med <b>${esc(m.l.navn)}</b>. <button class="btn small" data-act="useloc" data-id="${esc(m.l.id)}">Vælg ${esc(m.l.navn)}</button>`:" Tjek at du har valgt den rigtige lokation."}</div>`;
     } else if(st.auto===st.loc && !st.manual){
-      html=`<div class="tiny mut" style="margin-top:6px">Valgt automatisk ud fra GPS (${fmtDist(d)} fra lokationens midte).</div>`;
+      html=`<div class="tiny mut" style="margin-top:6px">Valgt automatisk ud fra GPS (${z.ude===0?"inden for området":"ca. "+fmtDist(z.ude)+" fra kanten"}).</div>`;
     }
-  } else if(GPS.pos && st.loc && !SPECIAL[st.loc] && l && !hasPos(l) && isAdmin()){
-    html=`<div class="tiny mut" style="margin-top:6px">${esc(l.navn)} har ingen GPS-position, så valget kan ikke tjekkes. Sæt den under Indstillinger → Lokationer.</div>`;
+  } else if(GPS.pos && st.loc && !SPECIAL[st.loc] && l && !hasArea(l) && isAdmin()){
+    html=`<div class="tiny mut" style="margin-top:6px">${esc(l.navn)} har intet GPS-område, så valget kan ikke tjekkes. Sæt den under Indstillinger → Lokationer.</div>`;
   }
   el.innerHTML=html;
   const b=$("#savemove")||$("#savecreate");
@@ -585,7 +612,7 @@ function viewSettings(){
     <h2>Lokationer</h2>
     <div class="stack">${sortLocs(S.locations).map(l=>`
       <div class="row" style="border-top:1px solid var(--line);padding-top:10px">
-        <div class="grow"><div style="font-weight:700">${esc(l.navn)}</div><div class="tiny mut">${tname[l.type]||""}${l.adresse?" · "+esc(l.adresse):""} ${hasPos(l)?`<span class="pill ok">GPS · ${esc(l.radius||RADIUS_STD)} m</span>`:(l.type!=="noegle"?'<span class="pill warn">Ingen GPS-position</span>':"")}</div></div>
+        <div class="grow"><div style="font-weight:700">${esc(l.navn)}</div><div class="tiny mut">${tname[l.type]||""}${l.adresse?" · "+esc(l.adresse):""} ${hasPoly(l)?`<span class="pill ok">GPS · område, ${l.omraade.length} hjørner</span>`:hasPos(l)?`<span class="pill ok">GPS · cirkel ${esc(l.radius||RADIUS_STD)} m</span>`:(l.type!=="noegle"?'<span class="pill warn">Intet GPS-område</span>':"")}</div></div>
         <button class="btn" data-editloc="${esc(l.id)}">Ret</button>
       </div>`).join("") || '<div class="mut small">Ingen lokationer endnu.</div>'}</div>
     <button class="btn pri block" style="margin-top:14px" data-editloc="">+ Ny lokation</button>
@@ -596,7 +623,8 @@ function viewSettings(){
 function openLocEditor(id){
   const l = id ? S.locations.find(x=>x.id===id) : {navn:"",type:"begge",adresse:""};
   if(!l) return;
-  S.locEdit = {pos:null, clear:false}; S.moveState = null; S.createState = null;
+  S.locEdit = {pos:null, clear:false, mode: hasPoly(l)||!hasPos(l) ? "poly" : "cirkel", poly: hasPoly(l) ? l.omraade.map(h=>h.slice()) : [], polyChanged:false, hadPoly:hasPoly(l), wantCorner:false};
+  S.moveState = null; S.createState = null;
   const used = id ? [...S.vehicles.values()].filter(v=>v.lokation===id || keysOf(v).some(k=>k.lokation===id)).length : 0;
   openSheet(`
     <div class="hd"><h2>${id?"Ret lokation":"Ny lokation"}</h2><button class="x" data-close>×</button></div>
@@ -606,17 +634,45 @@ function openLocEditor(id){
     <label class="f">Adresse / beskrivelse (valgfri)</label><input type="text" id="la" value="${esc(l.adresse||"")}">
     <div id="locgps" ${l.type==="noegle"?'style="display:none"':""}>
       <label class="f">GPS-område (bruges til at vælge lokationen automatisk, når en bil scannes)</label>
-      <div class="small mut" id="locposinfo">${hasPos(l)?`Position gemt · <a href="https://www.google.com/maps/search/?api=1&query=${l.lat},${l.lng}" target="_blank" rel="noopener">vis på kort</a>`:"Ingen position endnu. Stil dig midt på pladsen og tryk knappen."}</div>
+      <div class="seg" id="lmode"><button data-lm="poly" class="${S.locEdit.mode==="poly"?"on":""}">Område (hjørner)</button><button data-lm="cirkel" class="${S.locEdit.mode==="cirkel"?"on":""}">Cirkel</button></div>
       <div id="gpsstat" style="margin:6px 0"></div>
-      <div class="row" style="gap:8px">
+      <div id="lm-poly" ${S.locEdit.mode!=="poly"?'style="display:none"':""}>
+        <div class="tiny mut">Gå hen til hvert hjørne af pladsen i rækkefølge (rundt langs kanten) og tryk <b>Tilføj hjørne</b>. Mindst 3 hjørner. Ligger et område inde i et andet (fx showroom på grunden), vælges det mindste.</div>
+        <div id="polyview" style="margin:8px 0"></div>
+        <button class="btn pri block" data-act="polyadd">Tilføj hjørne</button>
+        <div class="row" style="gap:8px;margin-top:8px">
+          <button class="btn grow" data-act="polyundo">Fortryd sidste</button>
+          <button class="btn grow" data-act="polyclr">Start forfra</button>
+        </div>
+      </div>
+      <div id="lm-cirkel" ${S.locEdit.mode!=="cirkel"?'style="display:none"':""}>
+      <div class="small mut" id="locposinfo">${hasPos(l)?`Position gemt · <a href="https://www.google.com/maps/search/?api=1&query=${l.lat},${l.lng}" target="_blank" rel="noopener">vis på kort</a>`:"Ingen position endnu. Stil dig midt på pladsen og tryk knappen."}</div>
+      <div class="row" style="gap:8px;margin-top:6px">
         <button class="btn grow" data-act="locpos">${hasPos(l)?"Opdatér til min position":"Brug min position"}</button>
         ${hasPos(l)?'<button class="btn" data-act="locposclr">Fjern</button>':""}
       </div>
       <label class="f">Radius i meter</label><input type="number" id="lr" min="10" max="2000" step="5" value="${esc(l.radius||RADIUS_STD)}" inputmode="numeric">
       <div class="tiny mut">Hvor langt fra punktet en bil må stå og stadig høre til lokationen. Typisk 30–150 m.</div>
+      </div>
     </div>
     <button class="btn pri block" style="margin-top:16px" data-act="saveloc" data-id="${esc(id||"")}">Gem</button>
     ${id?`<div id="delwrap" style="margin-top:10px"><button class="btn dan block" data-act="delloc" data-id="${esc(id)}">Slet lokation</button>${used?`<div class="tiny mut" style="margin-top:6px">${used} biler/nøgler står her. De vises som "Slettet lokation", til de flyttes.</div>`:""}</div>`:""}`);
+  polyShow();
+}
+// Tegn hjørnerne som en lille skitse, så man kan se om formen ser rigtig ud
+function polyShow(){
+  const el=$("#polyview"), le=S.locEdit; if(!el||!le) return;
+  const P=le.poly;
+  if(!P.length){ el.innerHTML='<div class="small mut">Ingen hjørner endnu.</div>'; return; }
+  const q=proj(P,P[0][0],P[0][1]), xs=q.map(a=>a[0]), ys=q.map(a=>a[1]);
+  const x0=Math.min(...xs), x1=Math.max(...xs), y0=Math.min(...ys), y1=Math.max(...ys);
+  const W=300, H=180, pad=18, sc=Math.min((W-2*pad)/Math.max(x1-x0,1),(H-2*pad)/Math.max(y1-y0,1));
+  const pt=a=>[pad+(a[0]-x0)*sc+((W-2*pad)-(x1-x0)*sc)/2, H-pad-(a[1]-y0)*sc-((H-2*pad)-(y1-y0)*sc)/2];
+  const sp=q.map(pt), path=sp.map(a=>a.map(n=>n.toFixed(1)).join(",")).join(" ");
+  const shape = sp.length>=3 ? `<polygon points="${path}" fill="rgba(255,0,34,.12)" stroke="#FF0022" stroke-width="2"/>` : sp.length===2 ? `<polyline points="${path}" fill="none" stroke="#FF0022" stroke-width="2"/>` : "";
+  const dots = sp.map((a,i)=>`<circle cx="${a[0].toFixed(1)}" cy="${a[1].toFixed(1)}" r="9" fill="#282830"/><text x="${a[0].toFixed(1)}" y="${(a[1]+4).toFixed(1)}" text-anchor="middle" font-size="11" fill="#fff">${i+1}</text>`).join("");
+  const info = P.length>=3 ? `${P.length} hjørner · ca. ${Math.round(polyArea(q)).toLocaleString("da-DK")} m²${le.polyChanged?" · gemmes når du trykker Gem":""}` : `${P.length} hjørne${P.length>1?"r":""} – mindst 3 skal til`;
+  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto;background:var(--bg2,#f2f2f2);display:block">${shape}${dots}</svg><div class="tiny mut" style="margin-top:4px">${info} · nord er op</div>`;
 }
 function openEmpEditor(id){
   const e = id ? S.employees.find(x=>x.id===id) : {navn:"", rolle:"bruger", aktiv:true};
@@ -991,6 +1047,7 @@ document.addEventListener("click", async ev=>{
   if(d.kat){ S.createState.kat=d.kat; t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t));
     S.createState.nkeys = d.kat==="demo"?2:1; document.querySelectorAll("#cnk button").forEach(b=>b.classList.toggle("on", +b.dataset.nk===S.createState.nkeys)); return; }
   if(d.nk){ S.createState.nkeys=+d.nk; t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t)); return; }
+  if(d.lm && S.locEdit){ t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t)); S.locEdit.mode=d.lm; $("#lm-poly").style.display=d.lm==="poly"?"":"none"; $("#lm-cirkel").style.display=d.lm==="cirkel"?"":"none"; return; }
   if(d.lt || d.er){ t.parentNode.querySelectorAll("button").forEach(b=>b.classList.toggle("on",b===t)); if(d.lt && $("#locgps")) $("#locgps").style.display = d.lt==="noegle"?"none":""; return; }
   if(d.editloc!==undefined){ openLocEditor(d.editloc); return; }
   if(d.editemp!==undefined){ openEmpEditor(d.editemp); return; }
@@ -1008,11 +1065,22 @@ document.addEventListener("click", async ev=>{
   else if(a==="saveloc"){
     const type=($("#lt .on")||{dataset:{}}).dataset.lt||"begge"; t.disabled=true;
     const le=S.locEdit||{}; const p={id:d.id||"", navn:$("#ln").value, type, adresse:$("#la").value};
-    if(type!=="noegle"){ p.radius=$("#lr").value; if(le.clear) p.rydPos=true; else if(le.pos){ p.lat=le.pos.lat; p.lng=le.pos.lng; } }
+    if(type!=="noegle"){
+      if(le.mode==="poly"){
+        if(le.polyChanged && le.poly.length && le.poly.length<3){ toast("Området skal have mindst 3 hjørner"); t.disabled=false; return; }
+        if(le.polyChanged){ if(le.poly.length){ p.omraade=le.poly; p.rydPos=true; } else p.rydOmraade=true; } // område erstatter en evt. gammel cirkel
+      } else {
+        p.radius=$("#lr").value; if(le.clear) p.rydPos=true; else if(le.pos){ p.lat=le.pos.lat; p.lng=le.pos.lng; }
+        if(le.hadPoly) p.rydOmraade=true; // cirkel valgt → fjern gammelt område, ellers ville det stadig gælde
+      }
+    }
     if(await write("gemLokation",p,"Lokation gemt")) closeSheet(); else t.disabled=false;
   }
-  else if(a==="locpos"){ S.locEdit.clear=false; S.locEdit.want=true; gpsStart(); }
-  else if(a==="locposclr"){ gpsStop(); S.locEdit={pos:null, clear:true}; $("#gpsstat").innerHTML=""; $("#locposinfo").textContent="Positionen fjernes, når du trykker Gem."; }
+  else if(a==="polyadd"){ if(S.locEdit.wantCorner) return; S.locEdit.want=false; S.locEdit.wantCorner=true; gpsStart(); }
+  else if(a==="polyundo"){ S.locEdit.poly.pop(); S.locEdit.polyChanged=true; polyShow(); }
+  else if(a==="polyclr"){ gpsStop(); S.locEdit.wantCorner=false; S.locEdit.poly=[]; S.locEdit.polyChanged=true; $("#gpsstat").innerHTML=""; polyShow(); }
+  else if(a==="locpos"){ S.locEdit.wantCorner=false;  S.locEdit.clear=false; S.locEdit.want=true; gpsStart(); }
+  else if(a==="locposclr"){ gpsStop(); Object.assign(S.locEdit,{pos:null, clear:true, want:false}); $("#gpsstat").innerHTML=""; $("#locposinfo").textContent="Positionen fjernes, når du trykker Gem."; }
   else if(a==="delloc"){ $("#delwrap").innerHTML = `<div class="row"><span class="small grow">Slet lokationen?</span><button class="btn" data-close>Nej</button><button class="btn dan" data-act="delloc2" data-id="${esc(d.id)}">Ja, slet</button></div>`; }
   else if(a==="delloc2"){ if(await write("sletLokation",{id:d.id},"Lokation slettet")) closeSheet(); }
   else if(a==="saveemp"){
